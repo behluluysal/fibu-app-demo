@@ -1,0 +1,333 @@
+﻿@inject IBusinessPartnersScreenUseCases BusinessPartnersScreenUseCases
+@inject IRequestedProductsScreenUseCases RequestedProductsScreenUseCases
+@inject IProductsScreenUseCases ProductsScreenUseCases
+@inject NotificationService NotificationService
+@inject DialogService DialogService
+
+@using System.Text.Json;
+@using Core.AutoMapperDtos;
+@using Core.Pagination;
+
+
+<RadzenButton Icon="add_circle_outline" style="margin-bottom: 10px" Text="Ekle" Click="@InsertRow" />
+
+<RadzenDataGrid @ref="_requestedProductsGrid" AllowFiltering="true" FilterMode="FilterMode.Simple" AllowPaging="true" PageSizeOptions="@pageSizeOptions" AllowSorting="true" EditMode="DataGridEditMode.Single"
+                Data="@_requestedProducts" IsLoading="@isLoading" LoadData="@LoadData" Count="@count" TItem="RequestedProductDto" RowUpdate="@OnUpdateRow" RowCreate="@OnCreateRow" >
+    <Columns>
+
+
+
+
+        <RadzenDataGridColumn TItem="RequestedProductDto" Property="Product.Id" Title="Ürün" FilterValue="@productFilterValue">
+            <FilterTemplate>
+                <RadzenDropDown AllowFiltering="true" @bind-Value="@productFilterValue" TextProperty="Name" ValueProperty="Id" Data="@_productsDropdown" Change=@ProductFilterChange />
+            </FilterTemplate>
+            <EditTemplate Context="requestedProduct">
+                <RadzenDropDown AllowFiltering="true" @bind-Value="requestedProduct.ProductId" Data="@_products" TextProperty="Name" ValueProperty="Id" Style="width:100%" />
+            </EditTemplate>
+            <Template Context="requestedProduct">
+                @requestedProduct.Product.Name
+            </Template>
+        </RadzenDataGridColumn>
+
+        <RadzenDataGridColumn TItem="RequestedProductDto" Property="Request.BusinessPartner.Id" Title="İş Ortağı" FilterValue="@partnerFilterValue">
+            <FilterTemplate>
+                <RadzenDropDown AllowFiltering="true" @bind-Value="@partnerFilterValue" TextProperty="Name" ValueProperty="Id" Data="@_partnersDropdown" Change=@ProductFilterChange />
+            </FilterTemplate>
+            <EditTemplate Context="requestedProduct">
+                <RadzenDropDown AllowFiltering="true" @bind-Value="requestedProduct.Request.BusinessPartnerId" Data="@_businessPartners" TextProperty="Name" ValueProperty="Id" Style="width:100%" />
+            </EditTemplate>
+            <Template Context="requestedProduct">
+                @requestedProduct.Request.BusinessPartner.Name
+            </Template>
+        </RadzenDataGridColumn>
+
+        <RadzenDataGridColumn TItem="RequestedProductDto" Property="Quantity" Title="Adet">
+            <EditTemplate Context="requestedProduct">
+                <RadzenNumeric @bind-Value="requestedProduct.Quantity" Style="width:100%; display: block" Name="Quantity" />
+            </EditTemplate>
+        </RadzenDataGridColumn>
+
+        <RadzenDataGridColumn TItem="RequestedProductDto" Property="Deadline" Title="Bitiş Tarihi">
+            <EditTemplate Context="requestedProduct">
+                <RadzenDatePicker @bind-Value="requestedProduct.Deadline" Style="width:100%; display: block" Name="Deadline" />
+            </EditTemplate>
+        </RadzenDataGridColumn>
+
+        <RadzenDataGridColumn TItem="RequestedProductDto" Property="Status" Title="Durum" TextAlign="TextAlign.Center" FilterValue="@statusFilterValue">
+            <Template Context="requestedProduct">
+                @{
+                    RequestedProduct.StatusValues req_status = requestedProduct.Status;
+                    if (req_status == RequestedProduct.StatusValues.Created)
+                    {
+                        <RadzenBadge BadgeStyle="BadgeStyle.Secondary" IsPill="true" Text="@requestedProduct.Status.ToString()" Name="Status" />
+                        if (requestedProduct.Id != 0)
+                        {
+                            <RadzenButton Style="height: auto; padding: 0px 5px; margin-left: 8px;" Size="ButtonSize.Small" Click="@((args) => ApproveRequest(requestedProduct, _requestedProductsGrid))">
+                                <RadzenIcon Icon="check_circle" Style="font-size: 20px;"/>
+                            </RadzenButton>
+                        }
+                    }
+                    else if (req_status == RequestedProduct.StatusValues.Approved)
+                    {
+                        <RadzenBadge BadgeStyle="BadgeStyle.Warning" IsPill="true" Text="@requestedProduct.Status.ToString()" Name="Status" />
+                    }
+                    else if (req_status == RequestedProduct.StatusValues.PreConfirm)
+                    {
+                        //mustang should add the button on requestedproductrow component for preconfirm
+                        <RadzenBadge BadgeStyle="BadgeStyle.Primary" IsPill="true" Text="@requestedProduct.Status.ToString()" Name="Status" />
+                    }
+                    else if (req_status == RequestedProduct.StatusValues.Confirmed)
+                    {
+                        //mustagn should add the button for confirm, also there is another mustang on controller for sending mails
+                        <RadzenBadge BadgeStyle="BadgeStyle.Success" IsPill="true" Text="@requestedProduct.Status.ToString()" Name="Status" />
+                    }
+                }
+            </Template>
+            <FilterTemplate>
+                <RadzenDropDown AllowFiltering="true" @bind-Value="@statusFilterValue" TextProperty="Text" ValueProperty="Value" Change=@ProductFilterChange
+                                Data="@(Enum.GetValues(typeof(StatusFilterValues)).Cast<StatusFilterValues?>().Select(t => new { Text = $"{t}", Value = t }))" />
+            </FilterTemplate>
+        </RadzenDataGridColumn>
+
+
+        <RadzenDataGridColumn TItem="RequestedProductDto" Context="sampleBlazorModelsSampleOrder" Filterable="false" Sortable="false" TextAlign="TextAlign.Center" Width="70px">
+            <Template Context="requestedProduct">
+                <RadzenButton Icon="edit" Size="ButtonSize.Small" Click="@(args => EditRow(requestedProduct))" @onclick:stopPropagation="true">
+                </RadzenButton>
+            </Template>
+            <EditTemplate Context="requestedProduct">
+                <RadzenButton Icon="save" Size="ButtonSize.Small" Click="@((args) => SaveRow(requestedProduct))">
+                </RadzenButton>
+                <RadzenButton Icon="cancel" Size="ButtonSize.Small" ButtonStyle="ButtonStyle.Secondary" Click="@((args) => CancelEdit(requestedProduct))">
+                </RadzenButton>
+            </EditTemplate>
+        </RadzenDataGridColumn>
+        <RadzenDataGridColumn TItem="RequestedProductDto" Context="requestedProduct" Filterable="false" Sortable="false" TextAlign="TextAlign.Center" Width="70px">
+            <Template Context="requestedProduct">
+                @{
+                    if (requestedProduct.Id != 0)
+                    {
+                        <RadzenButton ButtonStyle="ButtonStyle.Danger" Icon="close" Size="ButtonSize.Small" @onclick:stopPropagation="true" Click=@(args => DeleteRow(requestedProduct, _requestedProductsGrid)) />
+                    }
+                }
+            </Template>
+        </RadzenDataGridColumn>
+    </Columns>
+</RadzenDataGrid>
+
+@code {
+    [CascadingParameter(Name = "MainLayout")]
+    public MainLayout MainLayout { get; set; }
+    async Task HandleException(Exception e) => await MainLayout.HandleException(e);
+
+
+    RadzenDataGrid<RequestedProductDto> _requestedProductsGrid;
+    private IEnumerable<RequestedProductDto> _requestedProducts { get; set; }
+    int count;
+    bool isLoading;
+    bool isCreate = false;
+    IEnumerable<int> pageSizeOptions = new int[] { 10, 25, 50, 100 };
+
+    private IEnumerable<ProductDto> _products { get; set; }
+    private List<ProductDto> _productsDropdown { get; set; }
+    private int? productFilterValue { get; set; }
+
+    private IEnumerable<BusinessPartnerDto> _businessPartners { get; set; }
+    private List<BusinessPartnerDto> _partnersDropdown { get; set; }
+    private int? partnerFilterValue { get; set; }
+
+    private int statusFilterValue { get; set; }
+
+    private enum StatusFilterValues
+    {
+        All = -1,
+        Created,
+        Approved,
+        PreConfirm,
+        Confirmed
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        //set selected status all at start
+        statusFilterValue = -1;
+        var response = await ProductsScreenUseCases.ViewProductsAsync(new QueryParams());
+        _products = response.Item2;
+        _productsDropdown = new List<ProductDto>();
+        _productsDropdown.Add(new ProductDto { Id = -1, Name = "All" });
+        _productsDropdown = _productsDropdown.Concat(_products).ToList();
+        var response2 = await BusinessPartnersScreenUseCases.ViewBusinessPartnersAsync(new QueryParams());
+        _businessPartners = response2.Item2;
+        _partnersDropdown = new List<BusinessPartnerDto>();
+        _partnersDropdown.Add(new BusinessPartnerDto { Id=-1, Name="All" });
+        _partnersDropdown = _partnersDropdown.Concat(_businessPartners).ToList();
+    }
+
+    #region DataGrid Region
+
+    async Task LoadData(LoadDataArgs args)
+    {
+        isLoading = true;
+        try
+        {
+            QueryParams qp = new QueryParams();
+            qp.Page = args.Skip.Value;
+            qp.PostsPerPage = args.Top.Value;
+            qp.Sort = args.OrderBy.ToString();
+            qp.Filter = args.Filter;
+            qp.Filter = qp.Filter.Replace("Status = -1", "Status != -1");
+            qp.Filter = qp.Filter.Replace("(Product == null ? null : Product.Id) = -1", "(ProductId != 0)");
+            qp.Filter = qp.Filter.Replace("(BusinessPartner == null ? null : BusinessPartner.Id) = -1", "(BusinessPartnerId != 0)");
+
+            var response = await RequestedProductsScreenUseCases.ViewRequestedProductsAsync(qp);
+            count = response.Item1;
+            _requestedProducts = response.Item2;
+            isLoading = false;
+        }
+        catch (Exception e)
+        {
+            await MainLayout.HandleException(e);
+        }
+    }
+
+    async Task OnUpdateRow(RequestedProductDto requestedProduct)
+    {
+        if (requestedProduct.Id == 0)
+        {
+            await OnCreateRow(requestedProduct);
+        }
+        else
+        {
+            try
+            {
+                await RequestedProductsScreenUseCases.UpdateRequestedProductAsync(requestedProduct.Id, requestedProduct);
+                ShowNotification(new NotificationMessage { Severity = NotificationSeverity.Success, Summary = "Ürün İsteğini Güncelle", Detail = $"{requestedProduct.Id} id'li ürün isteği başarıyla güncellendi.", Duration = 4000 });
+            }
+            catch (Exception e)
+            {
+                await HandleException(e);
+                EditRow(requestedProduct);
+            }
+        }
+        await _requestedProductsGrid.Reload();
+    }
+
+    async Task OnCreateRow(RequestedProductDto requestedProduct)
+    {
+        try
+        {
+            var response = await RequestedProductsScreenUseCases.CreateRequestedProductAsync(requestedProduct);
+            ShowNotification(new NotificationMessage { Severity = NotificationSeverity.Success, Summary = "Ürün İsteği Ekle", Detail = $"{response.Id} id'li ürün isteği başarıyla güncellendi", Duration = 4000 });
+            isCreate = false;
+            await _requestedProductsGrid.Reload();
+        }
+        catch (Exception e)
+        {
+            await HandleException(e);
+            await InsertRow(requestedProduct);
+        }
+    }
+
+
+    void EditRow(RequestedProductDto requestedProduct)
+    {
+        _requestedProductsGrid.EditRow(requestedProduct);
+    }
+
+    void SaveRow(RequestedProductDto requestedProduct)
+    {
+        _requestedProductsGrid.UpdateRow(requestedProduct);
+        isCreate = false;
+    }
+
+    void CancelEdit(RequestedProductDto requestedProduct)
+    {
+        _requestedProductsGrid.CancelEditRow(requestedProduct);
+        if (requestedProduct.Id == 0)
+            count--;
+        isCreate = false;
+        _requestedProductsGrid.Reload();
+    }
+
+    async Task DeleteRow(RequestedProductDto requestedProduct, RadzenDataGrid<RequestedProductDto> radzenDataGrid)
+    {
+        bool? flag = false;
+        flag = await DialogService.Confirm($"{requestedProduct.Product.Name} isimli ürünü bu istekten kaldırmak istediğinize emin misiniz?", "Ürün İsteğini Kaldır", new ConfirmOptions() { OkButtonText = "Evet", CancelButtonText = "Hayır" });
+        if (flag == true)
+        {
+            try
+            {
+                await RequestedProductsScreenUseCases.DeleteRequestedProductAsync(requestedProduct.Id);
+                ShowNotification(new NotificationMessage { Severity = NotificationSeverity.Success, Summary = "Ürün İsteğini Kaldır", Detail = $"{requestedProduct.Id} id'li ürün isteği başarıyla kaldırıldı.", Duration = 4000 });
+                await radzenDataGrid.Reload();
+            }
+            catch (Exception e)
+            {
+                await HandleException(e);
+            }
+        }
+    }
+
+    async Task InsertRow()
+    {
+        if (isCreate == false)
+        {
+            await _requestedProductsGrid.Reload();
+            RequestedProductDto temp = new RequestedProductDto();
+            temp.Product = new ProductDto();
+            temp.Request.BusinessPartner = new BusinessPartnerDto();
+            await _requestedProductsGrid.InsertRow(temp);
+            count++;
+        }
+        isCreate = true;
+    }
+
+    async Task InsertRow(RequestedProductDto requestedProduct)
+    {
+        if (isCreate == false)
+        {
+            await _requestedProductsGrid.Reload();
+            await _requestedProductsGrid.InsertRow(requestedProduct);
+            count++;
+        }
+        isCreate = true;
+    }
+
+    async Task ProductFilterChange()
+    {
+        await _requestedProductsGrid.Reload();
+    }
+
+    #endregion
+
+
+
+    #region Request Enum Operations
+
+    async Task ApproveRequest(RequestedProductDto request, RadzenDataGrid<RequestedProductDto> radzenDataGrid)
+    {
+        bool? flag = false;
+        flag = await DialogService.Confirm($"Are you sure to approve {request.Product.Name}?", "Approve Request", new ConfirmOptions() { OkButtonText = "Yes", CancelButtonText = "No" });
+        if (flag == true)
+        {
+            try
+            {
+                request.Status = RequestedProduct.StatusValues.Approved;
+                await RequestedProductsScreenUseCases.UpdateRequestedProductAsync(request.Id, request);
+                await radzenDataGrid.Reload();
+            }
+            catch (Exception e)
+            {
+                await MainLayout.HandleException(e);
+            }
+        }
+    }
+
+    #endregion
+    void ShowNotification(NotificationMessage message)
+    {
+        NotificationService.Notify(message);
+    }
+
+}

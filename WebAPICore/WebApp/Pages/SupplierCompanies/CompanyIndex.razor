@@ -1,0 +1,18 @@
+﻿@page "/supplier-companies"
+@attribute [Authorize(Roles = Permission.SupplierCompanies.View)]
+
+<h3 class="alert alert-link pl-0">SAĞLAYICI FİRMALAR</h3>
+
+<div>
+    <div class="row">
+        <div class="col col-md-12">
+            <CompanyRowComponent> </CompanyRowComponent>
+        </div>
+    </div>
+</div>
+
+
+
+@code {
+
+}

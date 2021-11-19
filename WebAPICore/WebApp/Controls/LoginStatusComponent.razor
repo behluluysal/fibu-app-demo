@@ -1,0 +1,27 @@
+﻿@inject NavigationManager NavigationManager
+@inject IAuthenticationUseCases AuthenticationUseCases
+
+
+<span class="mr-2">@userName</span>
+<button type="button" @onclick="Logout" class="btn btn-danger">Logout <RadzenIcon Icon="logout" Style="vertical-align: middle; margin-left: 3px;"/></button>
+
+@code {
+
+    [CascadingParameter]
+    public Task<AuthenticationState> authenticationState { get; set; }
+
+    string userName;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var state = await authenticationState;
+        userName = state.User.Claims.FirstOrDefault(x => x.Type == "unique_name")?.Value;
+    }
+
+    async Task Logout()
+    {
+        await AuthenticationUseCases.Logout();
+        NavigationManager.NavigateTo("/login", true);
+    }
+
+}

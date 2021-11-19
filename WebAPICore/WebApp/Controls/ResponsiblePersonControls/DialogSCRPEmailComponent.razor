@@ -1,0 +1,19 @@
+﻿@inject DialogService DialogService
+
+
+<RadzenCard Style="margin-bottom: 20px;">
+
+    <SCRPEmailRowComponent ResponsiblePersonId="ResponsiblePersonId" MainLayout="MainLayout" />
+
+</RadzenCard>
+<div class="row">
+    <div class="col-md-12 text-right">
+        <RadzenButton Click="@((args) => DialogService.Close(true))" ButtonStyle="ButtonStyle.Secondary" Text="Close" Style="margin-bottom: 10px; width: 150px" />
+    </div>
+</div>
+
+@code {
+    [Parameter] public int ResponsiblePersonId { get; set; }
+    [Parameter] public MainLayout MainLayout { get; set; }
+
+}

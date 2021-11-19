@@ -1,0 +1,20 @@
+﻿@page "/users"
+@inject IApplicationUsersScreenUseCases ApplicationUserUseCases
+@attribute [Authorize(Roles = Permission.Users.View)]
+
+<h3 class="alert alert-link pl-0">KULLANICILAR</h3>
+<div>
+    <div class="row">
+        <div class="col col-md-12">
+            <ApplicationUserRowComponent> </ApplicationUserRowComponent>
+        </div>
+    </div>
+</div>
+
+
+
+
+
+@code {
+
+}

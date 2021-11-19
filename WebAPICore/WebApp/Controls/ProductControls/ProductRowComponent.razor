@@ -1,0 +1,272 @@
+﻿@using System.Text.Json;
+@using Core.Pagination;
+@using WebApp.Controls.ProductControls;
+@using Core.AutoMapperDtos;
+@using Microsoft.AspNetCore.Http;
+
+@inject IProductsScreenUseCases ProductsScreenUseCases
+@inject NotificationService NotificationService
+@inject DialogService DialogService
+
+<style>
+    .rz-fileupload-row {
+        -webkit-box-pack: inherit !important;
+        display: block !important;
+    }
+</style>
+
+<AuthorizeView Roles="@Permission.Products.Create">
+    <Authorized>
+        <RadzenButton Icon="add_circle_outline" style="margin-bottom: 10px" Text="Ekle" Click="@InsertRow" />
+    </Authorized>
+</AuthorizeView>
+
+
+<RadzenDataGrid @ref="productsGrid" AllowFiltering="true" FilterMode="FilterMode.Simple" AllowPaging="true" PageSizeOptions="@pageSizeOptions" AllowSorting="true" EditMode="DataGridEditMode.Single"
+                Data="@products" IsLoading="@isLoading" LoadData="@LoadData" Count="@count" TItem="ProductDto" RowUpdate="@OnUpdateRow" RowCreate="@OnCreateRow" ColumnWidth="200px">
+    <Columns>
+
+        <AuthorizeView Roles="@Permission.Products.EditTag">
+            <Authorized>
+                <RadzenDataGridColumn Width="70px" TItem="ProductDto" Property="Id" Title="Detaylar" Filterable="false" Sortable="false" TextAlign="TextAlign.Center">
+                    <Template Context="product">
+                        @{
+                            if (product.Id != 0)
+                            {
+                                <RadzenButton ButtonStyle="ButtonStyle.Secondary" Icon="list" Click=@(() => OpenProduct(product.Name, product.Id, MainLayout)) Text="" />
+                            }
+                        }
+                    </Template>
+                </RadzenDataGridColumn>
+            </Authorized>
+        </AuthorizeView>
+
+        <RadzenDataGridColumn TItem="ProductDto" Title="Resim" Sortable="false" Filterable="false" Width="100px">
+            <Template Context="product">
+                @{
+                    if (!String.IsNullOrEmpty(product.Image) && product.Image.Length < 100)
+                    {
+                        string url = "https://localhost:5001/images/";
+                        url += product.Image;
+                        <RadzenImage Path="@url" style="width: 100px; height: 100px; border-radius: 8px; " />
+                    }
+                }
+            </Template>
+            <EditTemplate Context="product">
+                <RadzenFileInput @bind-Value=@product.Image Style="width:200px" TValue="string" />
+            </EditTemplate>
+        </RadzenDataGridColumn>
+
+
+        <RadzenDataGridColumn TItem="ProductDto" Property="Name" Title="Ürün İsmi">
+            <EditTemplate Context="product">
+
+                <RadzenTextBox @bind-Value="product.Name" Style="width:100%; display: block" Name="Name" />
+                @{
+                    if (count == 1)
+                    {
+                        <RadzenRequiredValidator Text="Product name is required" Component="Name" Popup="false" />
+                    }
+
+                    else
+                    {
+                        <RadzenRequiredValidator Text="Product name is required" Component="Name" Popup="true" />
+                    }
+                }
+            </EditTemplate>
+        </RadzenDataGridColumn>
+
+        <RadzenDataGridColumn TItem="ProductDto" Property="Description" Title="Açıklama">
+            <EditTemplate Context="product">
+                <RadzenTextBox @bind-Value="product.Description" Style="width:100%; display: block" Name="Description" />
+            </EditTemplate>
+        </RadzenDataGridColumn>
+
+        <AuthorizeView Roles="@Permission.Products.Edit">
+            <Authorized>
+                <RadzenDataGridColumn TItem="ProductDto" Context="sampleBlazorModelsSampleOrder" Filterable="false" Sortable="false" TextAlign="TextAlign.Center" Width="70px">
+                    <Template Context="product">
+                        <RadzenButton Icon="edit" Size="ButtonSize.Small" Click="@(args => EditRow(product))" @onclick:stopPropagation="true">
+                        </RadzenButton>
+                    </Template>
+                    <EditTemplate Context="product">
+                        <RadzenButton Icon="save" Size="ButtonSize.Small" Click="@((args) => SaveRow(product))">
+                        </RadzenButton>
+                        <RadzenButton Icon="cancel" Size="ButtonSize.Small" ButtonStyle="ButtonStyle.Secondary" Click="@((args) => CancelEdit(product))">
+                        </RadzenButton>
+                    </EditTemplate>
+                </RadzenDataGridColumn>
+            </Authorized>
+        </AuthorizeView>
+
+        <AuthorizeView Roles="@Permission.Products.Delete">
+            <Authorized>
+                <RadzenDataGridColumn TItem="ProductDto" Context="product" Filterable="false" Sortable="false" TextAlign="TextAlign.Center" Width="70px">
+                    <Template Context="product">
+                        @{
+                            if (product.Id != 0)
+                            {
+                                <RadzenButton ButtonStyle="ButtonStyle.Danger" Icon="close" Size="ButtonSize.Small" @onclick:stopPropagation="true" Click=@(args => DeleteRow(product, productsGrid)) />
+                            }
+                        }
+                    </Template>
+                </RadzenDataGridColumn>
+            </Authorized>
+        </AuthorizeView>
+
+    </Columns>
+</RadzenDataGrid>
+
+@code {
+    RadzenDataGrid<ProductDto> productsGrid;
+    private IEnumerable<ProductDto> products { get; set; }
+    int count;
+    bool isLoading;
+    bool isCreate = false;
+    IEnumerable<int> pageSizeOptions = new int[] { 10, 25, 50, 100 };
+
+    [CascadingParameter(Name = "MainLayout")]
+    public MainLayout MainLayout { get; set; }
+    async Task HandleException(Exception e) => await MainLayout.HandleException(e);
+
+    private IFormFile _image { get; set; }
+    #region DataGrid Region
+
+    async Task LoadData(LoadDataArgs args)
+    {
+        isLoading = true;
+        try
+        {
+            QueryParams qp = new QueryParams();
+            qp.Page = args.Skip.Value;
+            qp.PostsPerPage = args.Top.Value;
+            qp.Sort = args.OrderBy.ToString();
+            qp.Filter = args.Filter;
+
+            var response = await ProductsScreenUseCases.ViewProductsAsync(qp);
+            count = response.Item1;
+            products = response.Item2;
+            isLoading = false;
+        }
+        catch (Exception e)
+        {
+            await MainLayout.HandleException(e);
+        }
+    }
+
+    async Task OnUpdateRow(ProductDto product)
+    {
+        if (product.Id == 0)
+        {
+            await OnCreateRow(product);
+            return;
+        }
+        try
+        {
+            await ProductsScreenUseCases.UpdateProductAsync(product.Id, product);
+            ShowNotification(new NotificationMessage { Severity = NotificationSeverity.Success, Summary = "Ürün Güncelle", Detail = $"{product.Name} isimli ürün başarıyla güncellendi.", Duration = 4000 });
+            await productsGrid.Reload();
+        }
+        catch (Exception e)
+        {
+            await MainLayout.HandleException(e);
+            EditRow(product);
+        }
+    }
+
+    async Task OnCreateRow(ProductDto product)
+    {
+        try
+        {
+            _image = _image;
+            var response = await ProductsScreenUseCases.CreateProductAsync(product);
+            ShowNotification(new NotificationMessage { Severity = NotificationSeverity.Success, Summary = "Ürün Ekle", Detail = $"{product.Name} ürün başarıyla eklendi.", Duration = 4000 });
+            isCreate = false;
+            await productsGrid.Reload();
+        }
+        catch (Exception e)
+        {
+            await MainLayout.HandleException(e);
+            await InsertRow(product);
+        }
+    }
+
+
+    void EditRow(ProductDto product)
+    {
+        productsGrid.EditRow(product);
+    }
+
+    void SaveRow(ProductDto product)
+    {
+        productsGrid.UpdateRow(product);
+        isCreate = false;
+    }
+
+    void CancelEdit(ProductDto product)
+    {
+        productsGrid.CancelEditRow(product);
+        if (product.Id == 0)
+            count--;
+        isCreate = false;
+        productsGrid.Reload();
+    }
+
+    async Task DeleteRow(ProductDto product, RadzenDataGrid<ProductDto> radzenDataGrid)
+    {
+        bool? flag = false;
+        flag = await DialogService.Confirm($"{product.Name} isimli ürünü silmek istediğinize emin misiniz?", "Ürünü Sil", new ConfirmOptions() { OkButtonText = "Evet", CancelButtonText = "Hayır" });
+        if (flag == true)
+        {
+            try
+            {
+                await ProductsScreenUseCases.DeleteProductAsync(product.Id);
+                ShowNotification(new NotificationMessage { Severity = NotificationSeverity.Success, Summary = "Ürünü Sil", Detail = $"{product.Name} isimli ürün başarıyla silindi.", Duration = 4000 });
+                await radzenDataGrid.Reload();
+            }
+            catch (Exception e)
+            {
+                await MainLayout.HandleException(e);
+            }
+        }
+    }
+
+    async Task InsertRow()
+    {
+        if (isCreate == false)
+        {
+            await productsGrid.Reload();
+            await productsGrid.InsertRow(new ProductDto());
+            count++;
+        }
+        isCreate = true;
+    }
+
+    async Task InsertRow(ProductDto product)
+    {
+        if (isCreate == false)
+        {
+            await productsGrid.Reload();
+            await productsGrid.InsertRow(product);
+            count++;
+        }
+        isCreate = true;
+    }
+
+    #endregion
+
+
+
+    async Task OpenProduct(string productName, int productId, MainLayout mainLayout)
+    {
+        await DialogService.OpenAsync<DialogProductComponent>($"{productName} - Detaylar",
+              new Dictionary<string, object>() { { "ProductId", productId }, { "MainLayout", mainLayout } },
+              new DialogOptions() { });
+    }
+
+
+    void ShowNotification(NotificationMessage message)
+    {
+        NotificationService.Notify(message);
+    }
+}

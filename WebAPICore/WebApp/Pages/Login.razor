@@ -1,0 +1,81 @@
+﻿@page "/login/{Status?}"
+@layout EmptyLayout
+
+@using Core.ViewModels
+@inject IAuthenticationUseCases AuthenticationUseCases
+@inject NavigationManager NavigationManager
+@inject NotificationService NotificationService
+
+
+
+<div class="sidenav">
+</div>
+<div class="main row">
+<div class="col-md-3 col-sm-12"></div>
+    <div class="col-md-6 col-sm-12">
+        <div class="login-form">
+            <EditForm Model="applicationUser" OnValidSubmit="Logins">
+                <DataAnnotationsValidator></DataAnnotationsValidator>
+                <ValidationSummary></ValidationSummary>
+                <div class="form-group">
+                    <label>Email</label>
+                    <InputText @bind-Value="applicationUser.Email" class="form-control" type="email"></InputText>
+                </div>
+                <div class="form-group">
+                    <label>Password</label>
+                    <InputText @bind-Value="applicationUser.Password" class="form-control" type="password"></InputText>
+                </div>
+                <button type="submit" class="btn btn-primary">Login</button>
+            </EditForm>
+        </div>
+    </div>
+</div>
+
+
+    @code {
+        [Parameter]
+        public string Status { get; set; }
+
+
+        UserLoginViewModel applicationUser;
+
+        [CascadingParameter(Name = "EmptyLayout")]
+        public EmptyLayout EmptyLayout { get; set; }
+
+        void HandleException(Exception e) => EmptyLayout.HandleException(e);
+
+        protected override void OnInitialized()
+        {
+            if (applicationUser == null)
+                applicationUser = new UserLoginViewModel();
+
+            if(!string.IsNullOrEmpty(Status))
+                if(Status.Equals("Expired"))
+                    ShowNotification(new NotificationMessage { Severity = NotificationSeverity.Info, Summary = "Error", Detail = "Token is expired. Please login again", Duration = 4000 });
+        }
+
+        async Task Logins()
+        {
+            try
+            {
+                var response = await AuthenticationUseCases.LoginAsync(applicationUser);
+                if(!string.IsNullOrWhiteSpace(response.GetProperty("result").ToString()))
+                {
+                    NavigationManager.NavigateTo("/", true);
+                }
+                else
+                {
+                    ShowNotification(new NotificationMessage { Severity = NotificationSeverity.Error, Summary = "Error", Detail = response.GetProperty("title").ToString(), Duration = 4000 });
+                }
+            }
+            catch (Exception e)
+            {
+                EmptyLayout.HandleException(e);
+            }
+        }
+
+        void ShowNotification(NotificationMessage message)
+        {
+            NotificationService.Notify(message);
+        }
+    }

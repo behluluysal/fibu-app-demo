@@ -1,0 +1,20 @@
+﻿@page "/requests"
+@attribute [Authorize(Roles = Permission.Requests.View)]
+
+<h3 class="alert alert-link pl-0">REQUESTS</h3>
+
+
+
+<div>
+    <div class="row">
+        <div class="col col-md-12">
+            <RequestsRowComponent> </RequestsRowComponent>
+        </div>
+    </div>
+</div>
+
+
+
+@code {
+
+}

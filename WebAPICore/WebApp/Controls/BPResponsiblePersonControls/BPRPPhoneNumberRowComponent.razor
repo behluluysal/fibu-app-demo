@@ -1,0 +1,205 @@
+﻿@inject IBPResponsiblePeopleScreenUseCases ResponsiblePeopleScreenUseCases
+@inject NotificationService NotificationService
+@inject DialogService DialogService
+
+@using System.Text.Json;
+@using Core.AutoMapperDtos;
+@using Core.Pagination;
+
+<RadzenButton Icon="add_circle_outline" style="margin-bottom: 10px" Text="Ekle" Click="@InsertRow" />
+
+<RadzenDataGrid @ref="_bprpPhoneNumberGrid" AllowFiltering="true" FilterMode="FilterMode.Simple" AllowPaging="true" PageSizeOptions="@pageSizeOptions" AllowSorting="true" EditMode="DataGridEditMode.Single"
+                Data="@_bprpPhoneNumbers" IsLoading="@isLoading" LoadData="@LoadData" Count="@count" TItem="BPRPPhoneNumberDto" RowUpdate="@OnUpdateRow" RowCreate="@OnCreateRow" ColumnWidth="200px">
+    <Columns>
+
+
+        <RadzenDataGridColumn TItem="BPRPPhoneNumberDto" Property="Gsm" Title="Gsm">
+            <EditTemplate Context="phoneNumber">
+
+                <RadzenTextBox @bind-Value="phoneNumber.Gsm" Style="width:100%; display: block" Name="Gsm" />
+                @{
+                    if (count == 1)
+                    {
+                        <RadzenRequiredValidator Text="GSM zorunludur." Component="Gsm" Popup="false" />
+                    }
+
+                    else
+                    {
+                        <RadzenRequiredValidator Text="GSM zorunludur." Component="Gsm" Popup="true" />
+                    }
+                }
+            </EditTemplate>
+        </RadzenDataGridColumn>
+
+        <RadzenDataGridColumn TItem="BPRPPhoneNumberDto" Context="sampleBlazorModelsSampleOrder" Filterable="false" Sortable="false" TextAlign="TextAlign.Center" Width="70px">
+            <Template Context="phoneNumber">
+                <RadzenButton Icon="edit" Size="ButtonSize.Small" Click="@(args => EditRow(phoneNumber))" @onclick:stopPropagation="true">
+                </RadzenButton>
+            </Template>
+            <EditTemplate Context="phoneNumber">
+                <RadzenButton Icon="save" Size="ButtonSize.Small" Click="@((args) => SaveRow(phoneNumber))">
+                </RadzenButton>
+                <RadzenButton Icon="cancel" Size="ButtonSize.Small" ButtonStyle="ButtonStyle.Secondary" Click="@((args) => CancelEdit(phoneNumber))">
+                </RadzenButton>
+            </EditTemplate>
+        </RadzenDataGridColumn>
+        <RadzenDataGridColumn TItem="BPRPPhoneNumberDto" Context="phoneNumber" Filterable="false" Sortable="false" TextAlign="TextAlign.Center" Width="70px">
+            <Template Context="phoneNumber">
+                @{
+                    if (phoneNumber.Id != 0)
+                    {
+                        <RadzenButton ButtonStyle="ButtonStyle.Danger" Icon="close" Size="ButtonSize.Small" @onclick:stopPropagation="true" Click=@(args => DeleteRow(phoneNumber, _bprpPhoneNumberGrid)) />
+                    }
+                }
+            </Template>
+        </RadzenDataGridColumn>
+    </Columns>
+</RadzenDataGrid>
+
+@code {
+    [Parameter] public int ResponsiblePersonId { get; set; }
+    [Parameter] public MainLayout MainLayout { get; set; }
+    async Task HandleException(Exception e) => await MainLayout.HandleException(e);
+
+
+    RadzenDataGrid<BPRPPhoneNumberDto> _bprpPhoneNumberGrid;
+    private IEnumerable<BPRPPhoneNumberDto> _bprpPhoneNumbers { get; set; }
+    int count;
+    bool isLoading;
+    bool isCreate = false;
+    IEnumerable<int> pageSizeOptions = new int[] { 10, 25, 50, 100 };
+    
+
+    #region DataGrid Region
+
+    async Task LoadData(LoadDataArgs args)
+    {
+        isLoading = true;
+        try
+        {
+            QueryParams qp = new QueryParams();
+            qp.Page = args.Skip.Value;
+            qp.PostsPerPage = args.Top.Value;
+            qp.Sort = args.OrderBy.ToString();
+            qp.Filter = args.Filter;
+
+            var response = await ResponsiblePeopleScreenUseCases.ViewBPResponsiblePersonWithGsmsAsync(ResponsiblePersonId, qp);
+            count = response.PhoneNumbers.Count();
+            _bprpPhoneNumbers = response.PhoneNumbers;
+            isLoading = false;
+        }
+        catch (Exception e)
+        {
+            await MainLayout.HandleException(e);
+        }
+    }
+
+    async Task OnUpdateRow(BPRPPhoneNumberDto bprpPhoneNumberDto)
+    {
+        if (bprpPhoneNumberDto.Id == 0)
+        {
+            await OnCreateRow(bprpPhoneNumberDto);
+        }
+        else
+        {
+            try
+            {
+                await ResponsiblePeopleScreenUseCases.UpdatePhoneNumberToBPRP(bprpPhoneNumberDto.Id, bprpPhoneNumberDto);
+                ShowNotification(new NotificationMessage { Severity = NotificationSeverity.Success, Summary = "GSM Güncelle", Detail = $"{bprpPhoneNumberDto.Gsm} başarıyla güncellendi.", Duration = 4000 });
+            }
+            catch (Exception e)
+            {
+                await HandleException(e);
+                EditRow(bprpPhoneNumberDto);
+            }
+        }
+    }
+
+    async Task OnCreateRow(BPRPPhoneNumberDto bprpPhoneNumberDto)
+    {
+        try
+        {
+            bprpPhoneNumberDto.ResponsiblePersonId = ResponsiblePersonId;
+            var response = await ResponsiblePeopleScreenUseCases.CreatePhoneNumberToBPRP(bprpPhoneNumberDto);
+            ShowNotification(new NotificationMessage { Severity = NotificationSeverity.Success, Summary = "GSM Ekle", Detail = $"{response.Gsm} başarıyla eklendi.", Duration = 4000 });
+            isCreate = false;
+            await _bprpPhoneNumberGrid.Reload();
+        }
+        catch (Exception e)
+        {
+            await HandleException(e);
+            await InsertRow(bprpPhoneNumberDto);
+        }
+    }
+
+
+    void EditRow(BPRPPhoneNumberDto bprpPhoneNumberDto)
+    {
+        _bprpPhoneNumberGrid.EditRow(bprpPhoneNumberDto);
+    }
+
+    void SaveRow(BPRPPhoneNumberDto bprpPhoneNumberDto)
+    {
+        _bprpPhoneNumberGrid.UpdateRow(bprpPhoneNumberDto);
+        isCreate = false;
+    }
+
+    void CancelEdit(BPRPPhoneNumberDto bprpPhoneNumberDto)
+    {
+        _bprpPhoneNumberGrid.CancelEditRow(bprpPhoneNumberDto);
+        if (bprpPhoneNumberDto.Id == 0)
+            count--;
+        isCreate = false;
+        _bprpPhoneNumberGrid.Reload();
+    }
+
+    async Task DeleteRow(BPRPPhoneNumberDto bprpPhoneNumberDto, RadzenDataGrid<BPRPPhoneNumberDto> radzenDataGrid)
+    {
+        bool? flag = false;
+        flag = await DialogService.Confirm($"{bprpPhoneNumberDto.Gsm} 'i silmek istediğinize emin misiniz?", "GSM Sil", new ConfirmOptions() { OkButtonText = "Evet", CancelButtonText = "Hayır" });
+        if (flag == true)
+        {
+            try
+            {
+                await ResponsiblePeopleScreenUseCases.DeletePhoneNumberToBPRP(bprpPhoneNumberDto.ResponsiblePersonId,bprpPhoneNumberDto.Id);
+                ShowNotification(new NotificationMessage { Severity = NotificationSeverity.Success, Summary = "GSM Sil", Detail = $"{bprpPhoneNumberDto.Gsm} başarıyla silindi.", Duration = 4000 });
+                await radzenDataGrid.Reload();
+            }
+            catch (Exception e)
+            {
+                await HandleException(e);
+            }
+        }
+    }
+
+    async Task InsertRow()
+    {
+        if (isCreate == false)
+        {
+            await _bprpPhoneNumberGrid.Reload();
+            await _bprpPhoneNumberGrid.InsertRow(new BPRPPhoneNumberDto());
+            count++;
+        }
+        isCreate = true;
+    }
+
+    async Task InsertRow(BPRPPhoneNumberDto bprpPhoneNumberDto)
+    {
+        if (isCreate == false)
+        {
+            await _bprpPhoneNumberGrid.Reload();
+            await _bprpPhoneNumberGrid.InsertRow(bprpPhoneNumberDto);
+            count++;
+        }
+        isCreate = true;
+    }
+
+    #endregion
+
+
+    void ShowNotification(NotificationMessage message)
+    {
+        NotificationService.Notify(message);
+    }
+
+}

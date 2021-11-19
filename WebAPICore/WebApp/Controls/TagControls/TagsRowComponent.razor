@@ -1,0 +1,224 @@
+﻿@using System.Text.Json;
+@using Core.Pagination;
+@using Core.AutoMapperDtos;
+
+@inject ITagsScreenUseCases TagsScreenUseCases
+@inject NotificationService NotificationService
+@inject DialogService dialogService
+
+<AuthorizeView Roles="@Permission.Tags.Create">
+    <Authorized>
+        <RadzenButton Icon="add_circle_outline" style="margin-bottom: 10px" Text="Add" Click="@InsertRow" />
+    </Authorized>
+</AuthorizeView>
+
+
+
+<RadzenDataGrid @ref="tagsGrid" AllowFiltering="true" FilterMode="FilterMode.Simple" AllowPaging="true" PageSizeOptions="@pageSizeOptions" AllowSorting="true" EditMode="DataGridEditMode.Single"
+                Data="@tags" IsLoading="@isLoading" LoadData="@LoadData" Count="@count" TItem="TagDto" RowUpdate="@OnUpdateRow" RowCreate="@OnCreateRow">
+    <Columns>
+
+        <RadzenDataGridColumn TItem="TagDto" Property="Name" Title="Etiket Adı">
+            <EditTemplate Context="tag">
+                <RadzenTextBox @bind-Value="tag.Name" Style="width:100%; display: block" Name="Name" />
+                @{
+                    if (count == 1)
+                    {
+                        <RadzenRequiredValidator Text="Etiket adı zorunludur." Component="Name" Popup="false" />
+                    }
+
+                    else
+                    {
+                        <RadzenRequiredValidator Text="Etiket adı zorunludur." Component="Name" Popup="true" />
+                    }
+                }
+            </EditTemplate>
+        </RadzenDataGridColumn>
+
+        <AuthorizeView Roles="@Permission.Tags.Edit">
+            <Authorized>
+                <RadzenDataGridColumn TItem="TagDto" Context="sampleBlazorModelsSampleOrder" Filterable="false" Sortable="false" TextAlign="TextAlign.Center" Width="100px">
+                    <Template Context="tag">
+                        <RadzenButton Icon="edit" Size="ButtonSize.Small" Click="@(args => EditRow(tag))" @onclick:stopPropagation="true">
+                        </RadzenButton>
+                    </Template>
+                    <EditTemplate Context="tag">
+                        <RadzenButton Icon="save" Size="ButtonSize.Small" Click="@((args) => SaveRow(tag))">
+                        </RadzenButton>
+                        <RadzenButton Icon="cancel" Size="ButtonSize.Small" ButtonStyle="ButtonStyle.Secondary" Click="@((args) => CancelEdit(tag))">
+                        </RadzenButton>
+                    </EditTemplate>
+                </RadzenDataGridColumn>
+            </Authorized>
+        </AuthorizeView>
+
+        <AuthorizeView Roles="@Permission.Tags.Delete">
+            <Authorized>
+                <RadzenDataGridColumn TItem="TagDto" Context="tag" Filterable="false" Sortable="false" TextAlign="TextAlign.Center" Width="70px">
+                    <Template Context="tag">
+                        @{
+                            if (tag.Id != 0)
+                            {
+                                <RadzenButton ButtonStyle="ButtonStyle.Danger" Icon="close" Size="ButtonSize.Small" Click="@(args => DeleteRow(tag, tagsGrid))" @onclick:stopPropagation="true">
+                                </RadzenButton>
+                            }
+                        }
+
+                    </Template>
+                </RadzenDataGridColumn>
+            </Authorized>
+        </AuthorizeView>
+        
+    </Columns>
+</RadzenDataGrid>
+
+@code {
+    [CascadingParameter(Name = "MainLayout")]
+    public MainLayout MainLayout { get; set; }
+    async Task HandleException(Exception e) => await MainLayout.HandleException(e);
+
+
+    RadzenDataGrid<TagDto> tagsGrid;
+    public IEnumerable<TagDto> tags { get; set; }
+    int count = 1;
+    bool isLoading;
+    bool isCreate = false;
+    IEnumerable<int> pageSizeOptions = new int[] { 10, 25, 50, 100 };
+
+
+    #region DataGrid Operations
+
+    async Task LoadData(LoadDataArgs args)
+    {
+        isLoading = true;
+        try
+        {
+            QueryParams qp = new QueryParams();
+            qp.Page = args.Skip.Value;
+            qp.PostsPerPage = args.Top.Value;
+            qp.Sort = args.OrderBy.ToString();
+            qp.Filter = args.Filter;
+
+            var result = await TagsScreenUseCases.ViewTagsAsync(qp);
+            tags = result.Item2;
+            count = result.Item1;
+            isLoading = false;
+        }
+        catch (Exception e)
+        {
+            await MainLayout.HandleException(e);
+        }
+    }
+
+    async Task OnUpdateRow(TagDto tag)
+    {
+        if (tag.Id == 0)
+        {
+            await OnCreateRow(tag);
+            return;
+        }
+        try
+        {
+            await TagsScreenUseCases.UpdateTagAsync(tag.Id, tag);
+            ShowNotification(new NotificationMessage { Severity = NotificationSeverity.Success, Summary = "Etiket Güncelle", Detail = $"Etiket {tag.Id} başarıyla güncellendi.", Duration = 4000 });
+
+        }
+        catch (Exception e)
+        {
+            await MainLayout.HandleException(e);
+            EditRow(tag);
+        }
+    }
+
+    async Task OnCreateRow(TagDto tag)
+    {
+        try
+        {
+            var response = await TagsScreenUseCases.CreateTagAsync(tag);
+            ShowNotification(new NotificationMessage { Severity = NotificationSeverity.Success, Summary = "Etiket Ekle", Detail = $"{response.Name} başarıyla eklendi.", Duration = 4000 });
+            isCreate = false;
+            await tagsGrid.Reload();
+        }
+        catch (Exception e)
+        {
+            await MainLayout.HandleException(e);
+            isCreate = false;
+            await tagsGrid.Reload();
+        }
+    }
+    
+    async Task DeleteRow(TagDto tagDto, RadzenDataGrid<TagDto> radzenDataGrid)
+    {
+        bool? flag = false;
+        flag = await dialogService.Confirm($"{tagDto.Name} isimle etiketi silmek istediğinize emin misiniz?", "Etiketi Sil", new ConfirmOptions() { OkButtonText = "Evet", CancelButtonText = "Hayır" });
+        if (flag == true)
+        {
+            try
+            {
+                await TagsScreenUseCases.DeleteTagAsync(tagDto.Id);
+                ShowNotification(new NotificationMessage { Severity = NotificationSeverity.Success, Summary = "Etiketi Sil", Detail = $"Etiket {tagDto.Name.ToString()} başarıyla silindi.", Duration = 4000 });
+                await radzenDataGrid.Reload();
+            }
+            catch (Exception e)
+            {
+                await MainLayout.HandleException(e);
+            }
+        }
+    }
+
+    void EditRow(TagDto tag)
+    {
+        tagsGrid.EditRow(tag);
+    }
+
+    void SaveRow(TagDto tag)
+    {
+        tagsGrid.UpdateRow(tag);
+        isCreate = false;
+    }
+
+    void CancelEdit(TagDto tag)
+    {
+        tagsGrid.CancelEditRow(tag);
+        if (tag.Id == 0)
+            count--;
+        isCreate = false;
+        tagsGrid.Reload();
+    }
+
+
+    async Task InsertRow()
+    {
+        if (isCreate == false)
+        {
+            await tagsGrid.Reload();
+            await tagsGrid.InsertRow(new TagDto());
+            count++;
+        }
+        isCreate = true;
+    }
+
+    async Task InsertRow(TagDto tag)
+    {
+        if (isCreate == false)
+        {
+            await tagsGrid.Reload();
+            await tagsGrid.InsertRow(tag);
+            count++;
+        }
+        isCreate = true;
+    }
+
+    #endregion
+
+
+
+
+
+
+
+    void ShowNotification(NotificationMessage message)
+    {
+        NotificationService.Notify(message);
+    }
+}

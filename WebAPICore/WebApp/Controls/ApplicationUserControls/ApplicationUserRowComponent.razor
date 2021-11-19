@@ -1,0 +1,208 @@
+﻿@inject IApplicationUsersScreenUseCases ApplicationUsersScreenUseCases
+@inject NotificationService NotificationService
+@inject DialogService DialogService
+
+
+<AuthorizeView Roles="@Permission.Users.Create">
+    <Authorized>
+        <RadzenButton Icon="add_circle_outline" style="margin-bottom: 10px" Text="Add" Click="@CreateUser" />
+    </Authorized>
+</AuthorizeView>
+
+<RadzenDataGrid @ref="_usersGrid" AllowFiltering="true" FilterMode="FilterMode.Simple" AllowPaging="true" PageSizeOptions="@pageSizeOptions" AllowSorting="true" EditMode="DataGridEditMode.Single"
+                Data="@_users" IsLoading="@isLoading" LoadData="@LoadData" Count="@count" TItem="ApplicationUserDto">
+    <Columns>
+        <RadzenDataGridColumn Width="70px" TItem="ApplicationUserDto" Property="Id" Title="Roller" Filterable="false" Sortable="false" TextAlign="TextAlign.Center">
+            <Template Context="user">
+                @{
+                    if (user.Id != null)
+                    {
+                        <RadzenButton ButtonStyle="ButtonStyle.Secondary" Icon="list" Click=@(() => OpenUser(user.Username, user.Id)) Text="" />
+                    }
+                }
+            </Template>
+        </RadzenDataGridColumn>
+
+        <RadzenDataGridColumn TItem="ApplicationUserDto" Property="Email" Title="Email">
+
+        </RadzenDataGridColumn>
+
+
+
+
+        <RadzenDataGridColumn TItem="ApplicationUserDto" Context="user" Filterable="false" Sortable="false" TextAlign="TextAlign.Center" Width="70px">
+            <Template Context="user">
+                @{
+                    if (user.Id != null)
+                    {
+                        <RadzenButton ButtonStyle="ButtonStyle.Danger" Icon="close" Size="ButtonSize.Small" @onclick:stopPropagation="true" Click=@(args => DeleteRow(user, _usersGrid)) />
+                    }
+                }
+            </Template>
+        </RadzenDataGridColumn>
+
+
+    </Columns>
+</RadzenDataGrid>
+
+@code {
+    [CascadingParameter(Name = "MainLayout")]
+    public MainLayout MainLayout { get; set; }
+    async Task HandleException(Exception e) => await MainLayout.HandleException(e);
+
+
+    private RadzenDataGrid<ApplicationUserDto> _usersGrid;
+    private IEnumerable<ApplicationUserDto> _users { get; set; }
+
+
+    int count = 1;
+    bool isLoading;
+    IEnumerable<int> pageSizeOptions = new int[] { 10, 25, 50, 100 };
+
+    #region DataGrid Operations
+
+    async Task LoadData(LoadDataArgs args)
+    {
+        isLoading = true;
+        try
+        {
+            QueryParams qp = new QueryParams();
+            qp.Page = args.Skip.Value;
+            qp.PostsPerPage = args.Top.Value;
+            qp.Sort = args.OrderBy.ToString();
+            qp.Filter = args.Filter;
+
+            var result = await ApplicationUsersScreenUseCases.ViewUsersAsync(qp);
+            _users = result.Item2;
+            count = result.Item1;
+            isLoading = false;
+        }
+        catch (Exception e)
+        {
+            await MainLayout.HandleException(e);
+        }
+    }
+
+    /* User Update
+
+    async Task OnUpdateRow(ApplicationUserDto user)
+    {
+        try
+        {
+            await ApplicationUsersScreenUseCases.UpdateUserAsync(user, user.Id);
+            ShowNotification(new NotificationMessage { Severity = NotificationSeverity.Success, Summary = "Update", Detail = $"Tag with id {user.Id} updated successfully.", Duration = 4000 });
+        }
+        catch (Exception e)
+        {
+            JsonElement JsonErrors = JsonSerializer.Deserialize<dynamic>(e.Message);
+            if (JsonErrors.GetProperty("validationErrors").EnumerateArray().Count() != 0)
+            {
+                foreach (var error in JsonErrors.GetProperty("validationErrors").EnumerateArray())
+                {
+                    ShowNotification(new NotificationMessage { Severity = NotificationSeverity.Error, Summary = error.GetProperty("name").ToString(), Detail = error.GetProperty("reason").ToString(), Duration = 4000 });
+                }
+            }
+            else
+            {
+                ShowNotification(new NotificationMessage { Severity = NotificationSeverity.Error, Summary = "Error", Detail = JsonErrors.GetProperty("title").ToString(), Duration = 4000 });
+            }
+        }
+        await _usersGrid.Reload();
+    }
+
+    */
+
+    /* Create Row
+
+     async Task OnCreateRow(ApplicationUserDto user)
+    {
+        try
+        {
+            var response = await ApplicationUsersScreenUseCases.CreateUserAsync(user);
+            ShowNotification(new NotificationMessage { Severity = NotificationSeverity.Success, Summary = "Insert", Detail = $"Tag with id {user.Id} inserted successfully.", Duration = 4000 });
+        }
+        catch (Exception e)
+        {
+            JsonElement JsonErrors = JsonSerializer.Deserialize<dynamic>(e.Message);
+            if (JsonErrors.GetProperty("validationErrors").EnumerateArray().Count() != 0)
+            {
+                foreach (var error in JsonErrors.GetProperty("validationErrors").EnumerateArray())
+                {
+                    ShowNotification(new NotificationMessage { Severity = NotificationSeverity.Error, Summary = error.GetProperty("name").ToString(), Detail = error.GetProperty("reason").ToString(), Duration = 4000 });
+                }
+            }
+            else
+            {
+                ShowNotification(new NotificationMessage { Severity = NotificationSeverity.Error, Summary = "Error", Detail = JsonErrors.GetProperty("title").ToString(), Duration = 4000 });
+            }
+        }
+        await tagsGrid.Reload();
+    }
+
+    */
+
+    /*  extras for edit save
+
+    void InsertRow()
+    {
+        _usersGrid.InsertRow(new ApplicationUserDto());
+
+    }
+
+    void EditRow(ApplicationUserDto user)
+    {
+        _usersGrid.EditRow(user);
+    }
+
+    void SaveRow(ApplicationUserDto user)
+    {
+        _usersGrid.UpdateRow(user);
+    }
+
+    void CancelEdit(ApplicationUserDto user)
+    {
+        _usersGrid.CancelEditRow(user);
+    }
+    */
+
+    async Task DeleteRow(ApplicationUserDto user, RadzenDataGrid<ApplicationUserDto> radzenDataGrid)
+    {
+        bool? flag = false;
+        flag = await DialogService.Confirm($"{user.Username} kullanıcıyı silmek istediğinize emin misiniz?", "Kullanıcıyı Sil", new ConfirmOptions() { OkButtonText = "Evet", CancelButtonText = "Hayır" });
+        if (flag == true)
+        {
+            try
+            {
+                await ApplicationUsersScreenUseCases.DeleteUserAsync(user.Id);
+                ShowNotification(new NotificationMessage { Severity = NotificationSeverity.Success, Summary = "Kullanıcıyı Sil", Detail = $"{user.Email.ToString()} başarılı bir şekilde silindi.", Duration = 4000 });
+                await radzenDataGrid.Reload();
+            }
+            catch (Exception e)
+            {
+                await MainLayout.HandleException(e);
+            }
+        }
+    }
+
+    #endregion
+
+
+    async Task OpenUser(string userName, string userId)
+    {
+        await DialogService.OpenAsync<DialogUserComponent>($"{userName} - Roller",
+              new Dictionary<string, object>() { { "userId", userId } },
+              new DialogOptions() {  });
+    }
+
+    async Task CreateUser()
+    {
+        await DialogService.OpenAsync<DialogUserCreateComponent>($"Yeni Kullanıcı Oluştur",
+              new Dictionary<string, object>() { { "MainLayout", MainLayout }, { "_usersGrid", _usersGrid } },
+              new DialogOptions() { });
+    }
+
+    void ShowNotification(NotificationMessage message)
+    {
+        NotificationService.Notify(message);
+    }
+}

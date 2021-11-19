@@ -1,0 +1,136 @@
+﻿@inject ISupplierCompaniesScreenUseCases SupplierCompaniesScreenUseCases
+@inject ITagsScreenUseCases TagScreensSuseCases
+@inject NotificationService NotificationService
+@inject DialogService dialogService
+
+@using System.Text.Json;
+@using Core.AutoMapperDtos;
+@using Core.Pagination;
+
+
+
+
+<RadzenCard Style="margin-bottom: 20px;">
+
+    @{
+        if (_companyWithTags != null)
+        {
+            <style>
+                .pr_details * {
+                    font-size: small;
+                }
+            </style>
+            <div class="row pr_details">
+                <div class="col-12"><b>Adres:</b> @_companyWithTags.Adress</div>
+                <div class="col-12">
+                    <div class="row">
+                        <div class="col-12"><b>Etiket eklemek için seçiniz:</b></div>
+                        <div class="col-12 mt-2">
+                            <RadzenDropDown AllowClear="true" AllowFiltering="true" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive"
+                                            @bind-Value=@multipleValues Multiple="true" Data=@(_allTags) Placeholder="Seçiniz..." TextProperty="Name" ValueProperty="Id"
+                                            />
+                            <RadzenButton Click="@((args) => SaveTagsToCompany())" ButtonStyle="ButtonStyle.Secondary" Icon="check" Style="vertical-align: top;" />
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+    }
+</RadzenCard>
+<div class="row">
+    <div class="col-md-12 text-right">
+        <RadzenButton Click="@((args) => dialogService.Close(true))" ButtonStyle="ButtonStyle.Secondary" Text="Kapat" Style="margin-bottom: 10px; width: 150px" />
+    </div>
+</div>
+
+@code {
+    [Parameter] public int CompanyId { get; set; }
+    [Parameter] public MainLayout MainLayout { get; set; }
+    async Task HandleException(Exception e) => await MainLayout.HandleException(e);
+
+
+    public SupplierCompanyWithTagDto _companyWithTags;
+
+    private IEnumerable<TagDto> _allTags { get; set; }
+    IEnumerable<int> multipleValues = new List<int>();
+
+
+
+    protected override async Task OnParametersSetAsync()
+    {
+        try
+        {
+            _companyWithTags = await SupplierCompaniesScreenUseCases.ViewSupplierCompanyTagsAsync(CompanyId);
+            // Adding tag ids to multipleValues for Assign Withdraw Dropdown
+            List<int> temp = new List<int>();
+            foreach (var item in _companyWithTags.Tags)
+            {
+                temp.Add(item.Id);
+            }
+            multipleValues = multipleValues.Concat(temp);
+            var response2 = await TagScreensSuseCases.ViewTagsAsync(new QueryParams());
+            _allTags = response2.Item2;
+        }
+        catch (Exception e)
+        {
+            JsonElement JsonErrors = JsonSerializer.Deserialize<dynamic>(e.Message);
+            if (JsonErrors.TryGetProperty("validationErrors", out var validationErrors))
+            {
+                foreach (var error in validationErrors.EnumerateArray())
+                {
+                    ShowNotification(new NotificationMessage { Severity = NotificationSeverity.Error, Summary = error.GetProperty("name").ToString(), Detail = error.GetProperty("reason").ToString(), Duration = 4000 });
+                }
+            }
+            else
+            {
+                ShowNotification(new NotificationMessage { Severity = NotificationSeverity.Error, Summary = "Error", Detail = JsonErrors.GetProperty("title").ToString(), Duration = 4000 });
+            }
+        }
+    }
+
+    public async Task SaveTagsToCompany()
+    {
+        try
+        {
+            if (multipleValues == null)
+            {
+                foreach (var item in _companyWithTags.Tags)
+                {
+                    await SupplierCompaniesScreenUseCases.WithdrawTagFromSupplierCompanyAsync(_companyWithTags.Id, item.Id);
+                    ShowNotification(new NotificationMessage { Severity = NotificationSeverity.Info, Summary = "Etiket Kaldır", Detail = $"Etiket {_companyWithTags.Name} firmasından başarıyla kaldırıldı.", Duration = 4000 });
+                }
+            }
+            else
+            {
+                foreach (var item in multipleValues)
+                {
+                    if (!_companyWithTags.Tags.Any(x => x.Id == item))
+                    {
+                        await SupplierCompaniesScreenUseCases.AssignTagToSupplierCompanyAsync(_companyWithTags.Id, item);
+                        ShowNotification(new NotificationMessage { Severity = NotificationSeverity.Success, Summary = "Etiket Ekle", Detail = $"Etiket {_companyWithTags.Name} firmasına başarıyla eklendi.", Duration = 4000 });
+                    }
+                }
+                _companyWithTags = await SupplierCompaniesScreenUseCases.ViewSupplierCompanyTagsAsync(CompanyId);
+                foreach (var item in _companyWithTags.Tags)
+                {
+                    if (!(multipleValues).Contains(item.Id))
+                    {
+                        await SupplierCompaniesScreenUseCases.WithdrawTagFromSupplierCompanyAsync(_companyWithTags.Id, item.Id);
+                        ShowNotification(new NotificationMessage { Severity = NotificationSeverity.Info, Summary = "Etiket Kaldır", Detail = $"Etiket {_companyWithTags.Name} firmasından başarıyla kaldırıldı.", Duration = 4000 });
+                    }
+                }
+            }
+            _companyWithTags = await SupplierCompaniesScreenUseCases.ViewSupplierCompanyTagsAsync(CompanyId);
+
+        }
+        catch (Exception e)
+        {
+            await HandleException(e);
+        }
+    }
+
+    void ShowNotification(NotificationMessage message)
+    {
+        NotificationService.Notify(message);
+    }
+}

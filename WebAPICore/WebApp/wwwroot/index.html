@@ -1,0 +1,58 @@
+﻿<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>Fibu Teklif</title>
+    <base href="/" />
+    <link rel="apple-touch-icon" href="css/assets/images/apple-touch-icon.png">
+    <link rel="shortcut icon" href="css/assets/images/favicon.ico">
+
+    <link href="css/bootstrap/bootstrap.min.css" rel="stylesheet" />
+    <link href="css/app.css" rel="stylesheet" />
+    <link href="WebApp.styles.css" rel="stylesheet" />
+
+    <link rel="stylesheet" href="_content/Radzen.Blazor/css/default.css">
+    <link rel="stylesheet" href="_content/Radzen.Blazor/css/default-base.css">
+    <style>
+        .rz-navigation-menu {
+            position: fixed !important;
+            min-width: auto !important;
+            z-index: 999 !important;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="app">Loading...</div>
+
+    <div id="blazor-error-ui">
+        An unhandled error has occurred.
+        <a href="" class="reload">Reload</a>
+        <a class="dismiss">🗙</a>
+    </div>
+    <script src="_framework/blazor.webassembly.js"></script>
+    <script src="_content/Radzen.Blazor/Radzen.Blazor.js"></script>
+
+
+    <script>
+       
+        function loadCssFile(link) {
+            var link = document.createElement("link");
+            link.href = link;
+            link.type = "text/css";
+            link.rel = "stylesheet";
+            link.media = "screen,print";
+            document.getElementsByTagName("head")[0].appendChild(link);
+        }
+
+        async function loadJsFile(url) {
+            var script = document.createElement("script");
+            script.src = url;
+            await document.body.appendChild(script);
+        }
+    </script>
+</body>
+
+</html>

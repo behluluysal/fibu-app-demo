@@ -1,0 +1,21 @@
+﻿@page "/tags"
+@attribute [Authorize(Roles = Permission.Tags.View)]
+
+
+<h3 class="alert alert-link pl-0">ETİKET YÖNETİMİ</h3>
+
+
+
+<div>
+    <div class="row">
+        <div class="col col-md-12">
+            <TagsRowComponent> </TagsRowComponent>
+        </div>
+    </div>
+</div>
+
+
+
+@code {
+
+}

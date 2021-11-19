@@ -1,0 +1,33 @@
+﻿@inject ISupplierCompaniesScreenUseCases SupplierCompaniesScreenUseCases
+@inject IResponsiblePeopleScreenUseCases ResponsiblePeopleScreenUseCases
+@inject NotificationService NotificationService
+@inject DialogService DialogService
+
+@using System.Text.Json;
+@using Core.AutoMapperDtos;
+@using Core.Pagination;
+
+
+<RadzenCard Style="margin-bottom: 20px;">
+
+    <ResponsiblePersonRowComponent CompanyId="CompanyId" MainLayout="MainLayout"/>
+
+</RadzenCard>
+<div class="row">
+    <div class="col-md-12 text-right">
+        <RadzenButton Click="@((args) => DialogService.Close(true))" ButtonStyle="ButtonStyle.Secondary" Text="Close" Style="margin-bottom: 10px; width: 150px" />
+    </div>
+</div>
+
+@code {
+    [Parameter] public int CompanyId { get; set; }
+    [Parameter] public MainLayout MainLayout { get; set; }
+    async Task HandleException(Exception e) => await MainLayout.HandleException(e);
+
+
+    void ShowNotification(NotificationMessage message)
+    {
+        NotificationService.Notify(message);
+    }
+
+}

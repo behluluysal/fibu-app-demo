@@ -1,0 +1,31 @@
+﻿@using RazorHtmlEmails.RazorClassLib.Views.Emails.NewAccount
+@using RazorHtmlEmails.RazorClassLib.Views.Shared
+@model NewAccountEmailViewModel
+
+@{
+    ViewData["EmailTitle"] = "Welcome to FIBU Online System";
+}
+
+<p>
+    We're excited to have you get started. Here are your login credentials:
+    <br />
+    <b>Email: </b> @Model.ApplicationUser.Email
+    <br />
+    <b>Password: </b> @Model.ApplicationUser.Password
+</p>
+
+<br />
+
+@await Html.PartialAsync("EmailButton", new EmailButtonViewModel("Go to Website", Model.WebsiteUrl))
+
+<br />
+
+<p>
+    If you have any questions, just reply to this email—we're always happy to help out.
+</p>
+
+<br />
+
+<p>
+    FIBU Team
+</p>

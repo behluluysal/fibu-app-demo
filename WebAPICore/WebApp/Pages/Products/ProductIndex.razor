@@ -1,0 +1,20 @@
+﻿@page "/products"
+@attribute [Authorize(Roles = Permission.Products.View)]
+
+<h3 class="alert alert-link pl-0">ÜRÜN YÖNETİMİ</h3>
+
+
+
+<div>
+    <div class="row">
+        <div class="col col-md-12">
+            <ProductRowComponent> </ProductRowComponent>
+        </div>
+    </div>
+</div>
+
+
+
+@code {
+
+}

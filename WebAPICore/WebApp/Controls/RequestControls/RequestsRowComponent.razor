@@ -1,0 +1,337 @@
+﻿@inject IRequestsScreenUseCases RequestsScreenUseCases
+@inject IBusinessPartnersScreenUseCases BusinessPartnersScreenUseCases
+
+@inject NotificationService NotificationService
+@inject DialogService DialogService
+
+@using System.Text.Json;
+@using Core.AutoMapperDtos;
+@using Core.Pagination;
+
+
+<AuthorizeView Roles="@Permission.Requests.Create">
+    <Authorized>
+        <RadzenButton Icon="add_circle_outline" style="margin-bottom: 10px" Text="Add" Click="@InsertRow" />
+    </Authorized>
+</AuthorizeView>
+
+
+<RadzenDataGrid @ref="_requestsGrid" AllowFiltering="true" FilterMode="FilterMode.Simple" AllowPaging="true" PageSizeOptions="@pageSizeOptions" AllowSorting="true" EditMode="DataGridEditMode.Single"
+                Data="@_requests" IsLoading="@isLoading" LoadData="@LoadData" Count="@count" TItem="RequestDto" RowUpdate="@OnUpdateRow" RowCreate="@OnCreateRow">
+    <Columns>
+
+        <AuthorizeView Roles="@Permission.RequestedProducts.View">
+            <Authorized>
+                <RadzenDataGridColumn Width="70px" TItem="RequestDto" Property="Id" Title="Ürünler" Filterable="false" Sortable="false" TextAlign="TextAlign.Center">
+                    <Template Context="request">
+                        @{
+                            if (request.Id != 0)
+                            {
+                                <RadzenButton ButtonStyle="ButtonStyle.Secondary" Icon="list" Click=@(() => OpenRequestProducts(request.No, request.BusinessPartnerId, request.Id , MainLayout)) Text="" />
+                            }
+                        }
+                    </Template>
+                </RadzenDataGridColumn>
+            </Authorized>
+        </AuthorizeView>
+
+        <RadzenDataGridColumn TItem="RequestDto" Property="BusinessPartner.Id" Title="İş Ortağı" FilterValue="@partnerFilterValue">
+            <FilterTemplate>
+                <RadzenDropDown AllowFiltering="true" @bind-Value="@partnerFilterValue" TextProperty="Name" ValueProperty="Id" Data="@_partnersDropdown" Change=@ProductFilterChange />
+            </FilterTemplate>
+            <EditTemplate Context="request">
+                <RadzenDropDown AllowFiltering="true" @bind-Value="request.BusinessPartnerId" Data="@_businessPartners" TextProperty="Name" ValueProperty="Id" Style="width:100%" />
+            </EditTemplate>
+            <Template Context="request">
+                @request.BusinessPartner.Name
+            </Template>
+        </RadzenDataGridColumn>
+
+        <RadzenDataGridColumn TItem="RequestDto" Property="No" Title="No">
+        </RadzenDataGridColumn>
+
+
+
+        <RadzenDataGridColumn TItem="RequestDto" Property="Status" Title="Durum" TextAlign="TextAlign.Center" FilterValue="@statusFilterValue">
+            <Template Context="request">
+                @{
+                    Request.StatusValues req_status = request.Status;
+                    if (req_status == Request.StatusValues.Created)
+                    {
+                        <RadzenBadge BadgeStyle="BadgeStyle.Secondary" IsPill="true" Text="@request.Status.ToString()" Name="Status" />
+                        if (request.Id != 0)
+                        {
+                            <RadzenButton Style="height: auto; padding: 0px 5px; margin-left: 8px;" Size="ButtonSize.Small" Click="@((args) => ApproveRequest(request, _requestsGrid))">
+                                <RadzenIcon Icon="check_circle" Style="font-size: 20px;" />
+                            </RadzenButton>
+                        }
+                    }
+                    else if (req_status == Request.StatusValues.Approved)
+                    {
+                        <RadzenBadge BadgeStyle="BadgeStyle.Warning" IsPill="true" Text="@request.Status.ToString()" Name="Status" />
+                    }
+                    else if (req_status == Request.StatusValues.Completed)
+                    {
+                        //mustang should add the button on requestedproductrow component for preconfirm
+                        <RadzenBadge BadgeStyle="BadgeStyle.Primary" IsPill="true" Text="@request.Status.ToString()" Name="Status" />
+                    }
+                }
+            </Template>
+            <FilterTemplate>
+                <RadzenDropDown AllowFiltering="true" @bind-Value="@statusFilterValue" TextProperty="Text" ValueProperty="Value" Change=@ProductFilterChange
+                                Data="@(Enum.GetValues(typeof(StatusFilterValues)).Cast<StatusFilterValues?>().Select(t => new { Text = $"{t}", Value = t }))" />
+            </FilterTemplate>
+        </RadzenDataGridColumn>
+
+        <AuthorizeView Roles="@Permission.Requests.Edit">
+            <Authorized>
+                <RadzenDataGridColumn TItem="RequestDto" Context="sampleBlazorModelsSampleOrder" Filterable="false" Sortable="false" TextAlign="TextAlign.Center" Width="70px">
+                    <Template Context="request">
+                        <RadzenButton Icon="edit" Size="ButtonSize.Small" Click="@(args => EditRow(request))" @onclick:stopPropagation="true">
+                        </RadzenButton>
+                    </Template>
+                    <EditTemplate Context="request">
+                        <RadzenButton Icon="save" Size="ButtonSize.Small" Click="@((args) => SaveRow(request))">
+                        </RadzenButton>
+                        <RadzenButton Icon="cancel" Size="ButtonSize.Small" ButtonStyle="ButtonStyle.Secondary" Click="@((args) => CancelEdit(request))">
+                        </RadzenButton>
+                    </EditTemplate>
+                </RadzenDataGridColumn>
+            </Authorized>
+        </AuthorizeView>
+
+        <AuthorizeView Roles="@Permission.Requests.Delete">
+            <Authorized>
+                <RadzenDataGridColumn TItem="RequestDto" Context="request" Filterable="false" Sortable="false" TextAlign="TextAlign.Center" Width="70px">
+                    <Template Context="request">
+                        @{
+                            if (request.Id != 0)
+                            {
+                                <RadzenButton ButtonStyle="ButtonStyle.Danger" Icon="close" Size="ButtonSize.Small" @onclick:stopPropagation="true" Click=@(args => DeleteRow(request, _requestsGrid)) />
+                            }
+                        }
+                    </Template>
+                </RadzenDataGridColumn>
+            </Authorized>
+        </AuthorizeView>
+        
+    </Columns>
+</RadzenDataGrid>
+
+@code {
+    [CascadingParameter(Name = "MainLayout")]
+    public MainLayout MainLayout { get; set; }
+    async Task HandleException(Exception e) => await MainLayout.HandleException(e);
+
+
+    RadzenDataGrid<RequestDto> _requestsGrid;
+    private IEnumerable<RequestDto> _requests { get; set; }
+    int count;
+    bool isLoading;
+    bool isCreate = false;
+    IEnumerable<int> pageSizeOptions = new int[] { 10, 25, 50, 100 };
+
+
+    private IEnumerable<BusinessPartnerDto> _businessPartners { get; set; }
+    private List<BusinessPartnerDto> _partnersDropdown { get; set; }
+    private int? partnerFilterValue { get; set; }
+
+    private int statusFilterValue { get; set; }
+
+    private enum StatusFilterValues
+    {
+        All = -1,
+        Created,
+        Approved,
+        PreConfirm,
+        Confirmed
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        //set selected status all at start
+        statusFilterValue = -1;
+
+        var response2 = await BusinessPartnersScreenUseCases.ViewBusinessPartnersAsync(new QueryParams());
+        _businessPartners = response2.Item2;
+        _partnersDropdown = new List<BusinessPartnerDto>();
+        _partnersDropdown.Add(new BusinessPartnerDto { Id = -1, Name = "All" });
+        _partnersDropdown = _partnersDropdown.Concat(_businessPartners).ToList();
+    }
+
+    #region DataGrid Region
+
+    async Task LoadData(LoadDataArgs args)
+    {
+        isLoading = true;
+        try
+        {
+            QueryParams qp = new QueryParams();
+            qp.Page = args.Skip.Value;
+            qp.PostsPerPage = args.Top.Value;
+            qp.Sort = args.OrderBy.ToString();
+            qp.Filter = args.Filter;
+            qp.Filter = qp.Filter.Replace("Status = -1", "Status != -1");
+            qp.Filter = qp.Filter.Replace("(BusinessPartner == null ? null : BusinessPartner.Id) = -1", "(BusinessPartnerId != 0)");
+
+            var response = await RequestsScreenUseCases.ViewRequestsAsync(qp);
+            count = response.Item1;
+            _requests = response.Item2;
+            isLoading = false;
+        }
+        catch (Exception e)
+        {
+            await HandleException(e);
+        }
+    }
+
+    async Task OnUpdateRow(RequestDto request)
+    {
+        if (request.Id == 0)
+        {
+            await OnCreateRow(request);
+        }
+        else
+        {
+            try
+            {
+                await RequestsScreenUseCases.UpdateRequestAsync(request.Id, request);
+                ShowNotification(new NotificationMessage { Severity = NotificationSeverity.Success, Summary = "Update", Detail = $"Product Request with id {request.Id} updated successfully.", Duration = 4000 });
+            }
+            catch (Exception e)
+            {
+                await HandleException(e);
+                EditRow(request);
+            }
+        }
+        await _requestsGrid.Reload();
+    }
+
+    async Task OnCreateRow(RequestDto request)
+    {
+        try
+        {
+            var response = await RequestsScreenUseCases.CreateRequestAsync(request);
+            ShowNotification(new NotificationMessage { Severity = NotificationSeverity.Success, Summary = "Insert", Detail = $"Product Request with id {response.Id} inserted successfully.", Duration = 4000 });
+            isCreate = false;
+            await _requestsGrid.Reload();
+        }
+        catch (Exception e)
+        {
+            await HandleException(e);
+            await InsertRow(request);
+        }
+    }
+
+
+    void EditRow(RequestDto request)
+    {
+        _requestsGrid.EditRow(request);
+    }
+
+    void SaveRow(RequestDto request)
+    {
+        _requestsGrid.UpdateRow(request);
+        isCreate = false;
+    }
+
+    void CancelEdit(RequestDto request)
+    {
+        _requestsGrid.CancelEditRow(request);
+        if (request.Id == 0)
+            count--;
+        isCreate = false;
+        _requestsGrid.Reload();
+    }
+
+    async Task DeleteRow(RequestDto request, RadzenDataGrid<RequestDto> radzenDataGrid)
+    {
+        bool? flag = false;
+        flag = await DialogService.Confirm($"{request.No} numaralı isteği silmek istediğinize emin misiniz?", "İsteği Sil", new ConfirmOptions() { OkButtonText = "Evet", CancelButtonText = "Hayır" });
+        if (flag == true)
+        {
+            try
+            {
+                await RequestsScreenUseCases.DeleteRequestAsync(request.Id);
+                ShowNotification(new NotificationMessage { Severity = NotificationSeverity.Success, Summary = "İsteği Sil", Detail = $"{request.No} numaralı istek başarıyla silindi.", Duration = 4000 });
+                await radzenDataGrid.Reload();
+            }
+            catch (Exception e)
+            {
+                await MainLayout.HandleException(e);
+            }
+        }
+    }
+
+    async Task InsertRow()
+    {
+        if (isCreate == false)
+        {
+            await _requestsGrid.Reload();
+            RequestDto temp = new RequestDto();
+            temp.BusinessPartner = new BusinessPartnerDto();
+            await _requestsGrid.InsertRow(temp);
+            count++;
+        }
+        isCreate = true;
+    }
+
+    async Task InsertRow(RequestDto request)
+    {
+        if (isCreate == false)
+        {
+            await _requestsGrid.Reload();
+            await _requestsGrid.InsertRow(request);
+            count++;
+        }
+        isCreate = true;
+    }
+
+    async Task ProductFilterChange()
+    {
+        await _requestsGrid.Reload();
+    }
+
+    #endregion
+
+    #region Dialog Services
+
+    async Task OpenRequestProducts(string no, int partnerId, int requestId, MainLayout mainLayout)
+    {
+        await DialogService.OpenAsync<DialogRequestRequestedProductsComponent>($"{no} - Detaylar",
+              new Dictionary<string, object>() { { "PartnerId", partnerId }, {"RequestId", requestId } , {"MainLayout", mainLayout }, { "RequestGrid", _requestsGrid } },
+              new DialogOptions() { Width="1000px" });
+    }
+
+    #endregion
+
+
+    #region Request Enum Operations
+
+    async Task ApproveRequest(RequestDto request, RadzenDataGrid<RequestDto> radzenDataGrid)
+    {
+        bool? flag = false;
+        flag = await DialogService.Confirm($"Are you sure to approve {request.No}?", "Approve Request", new ConfirmOptions() { OkButtonText = "Yes", CancelButtonText = "No" });
+        if (flag == true)
+        {
+            try
+            {
+                request.Status = Request.StatusValues.Approved;
+                await RequestsScreenUseCases.UpdateRequestAsync(request.Id, request);
+                await radzenDataGrid.Reload();
+            }
+            catch (Exception e)
+            {
+                request.Status = Request.StatusValues.Created;
+                await MainLayout.HandleException(e);
+            }
+        }
+    }
+
+    #endregion
+    void ShowNotification(NotificationMessage message)
+    {
+        NotificationService.Notify(message);
+    }
+
+}

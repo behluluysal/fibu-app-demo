@@ -1,0 +1,148 @@
+﻿@inject IApplicationUsersScreenUseCases ApplicationUserUseCases
+@inject IRolesScreenUseCases RoleScreenUseCases
+@inject NotificationService NotificationService
+@inject DialogService dialogService
+
+@using System.Text.Json;
+@using Core.AutoMapperDtos;
+@using Core.Pagination;
+
+
+
+
+<RadzenCard Style="margin-bottom: 20px;">
+
+    @{
+        if (CombinedRoleBoolList != null)
+        {
+            foreach (var itemParent in CombinedRoleBoolList.OrderBy(x => x.Order).GroupBy(x => x.Parent).Select(x=>new { Title=x.Key, Children=x }))
+            {
+            <div class="row" style="border-bottom: 3px inset; margin-bottom: 10px; padding-bottom: 10px;">
+                <div class="col-12">
+                    <h3 style="color: #8502ff;">@itemParent.Title</h3>
+                </div>
+                @foreach (var item in itemParent.Children)
+                {
+                <div class="col-6 col-md-4 col-lg-3 col-xl-2">
+                    <label class="form-check-label" for="flexSwitchCheckDefault">@item.ClaimValue.Substring(item.ClaimValue.IndexOf(".") + 1)</label>
+                    <br />
+                    <RadzenSwitch @bind-Value="item.ClaimSwitch" Change=@(args => OnChange(args, item)) />
+                </div>
+                }
+            </div>
+            }
+        }
+    }
+</RadzenCard>
+<div class="row">
+    <div class="col-md-12 text-right">
+        <RadzenButton Click="@((args) => dialogService.Close(true))" ButtonStyle="ButtonStyle.Secondary" Text="OK" Style="margin-bottom: 10px; width: 150px" />
+    </div>
+</div>
+
+@code {
+    [Parameter] public string roleId { get; set; }
+    [Parameter] public MainLayout MainLayout { get; set; }
+    async Task HandleException(Exception e) => await MainLayout.HandleException(e);
+
+
+    public class RoleClaimSwith
+    {
+        public string Parent { get; set; }
+        public int Order { get; set; }
+        public string ClaimValue { get; set; }
+        public bool ClaimSwitch { get; set; }
+    }
+
+
+    RoleWithClaimDto RoleWithClaim;
+    public List<PermissionsViewList> Claims { get; set; }
+    List<RoleClaimSwith> CombinedRoleBoolList;
+
+    public class PermissionsViewList
+    {
+        public string Title { get; set; }
+        public int Order { get; set; }
+        public List<string> Permissions { get; set; }
+    }
+
+
+    protected override async Task OnParametersSetAsync()
+    {
+        try
+        {
+            Claims = new List<PermissionsViewList>()
+            {
+                new PermissionsViewList { Title = "Dashboard", Order=1, Permissions = Permission.Dashboards._metrics },
+                new PermissionsViewList { Title = "Users", Order=14, Permissions = Permission.Users._metrics },
+                new PermissionsViewList { Title = "Tags", Order=2, Permissions = Permission.Tags._metrics },
+                new PermissionsViewList { Title = "Roles", Order=15, Permissions = Permission.Roles._metrics },
+                new PermissionsViewList { Title = "Products", Order=3, Permissions = Permission.Products._metrics },
+                new PermissionsViewList { Title = "Supplier Companies", Order=10, Permissions = Permission.SupplierCompanies._metrics },
+                new PermissionsViewList { Title = "Supplier Company Workers", Order=12, Permissions = Permission.SCResponsiblePeople._metrics },
+                new PermissionsViewList { Title = "Supplier Company Worker Emails", Order=12, Permissions = Permission.SCRPEmails._metrics },
+                new PermissionsViewList { Title = "Supplier Company Worker Phones", Order=13, Permissions = Permission.SCRPPhones._metrics },
+                new PermissionsViewList { Title = "Business Partners", Order=4, Permissions = Permission.BusinessPartners._metrics },
+                new PermissionsViewList { Title = "Business Partner Workers", Order=5, Permissions = Permission.BPResponsiblePeople._metrics },
+                new PermissionsViewList { Title = "Business Partner Worker Emails", Order=6, Permissions = Permission.BPRPEmails._metrics },
+                new PermissionsViewList { Title = "Business Partner Worker Phones", Order=7, Permissions = Permission.BPRPPhones._metrics },
+                new PermissionsViewList { Title = "Requested Products", Order=8, Permissions = Permission.RequestedProducts._metrics },
+                new PermissionsViewList { Title = "Requests", Order=16, Permissions = Permission.Requests._metrics },
+                new PermissionsViewList { Title = "Offers", Order=9, Permissions = Permission.Offers._metrics },
+                new PermissionsViewList { Title = "Chats", Order=17, Permissions = Permission.Chats._metrics }
+            };
+
+
+            CombinedRoleBoolList = new List<RoleClaimSwith>();
+
+            try
+            {
+                RoleWithClaim = await RoleScreenUseCases.GetClaimsAsync(roleId);
+                foreach (var itemBase in Claims)
+                {
+                    foreach (var item in itemBase.Permissions)
+                    {
+                        CombinedRoleBoolList.Add(new RoleClaimSwith {Order=itemBase.Order ,Parent = itemBase.Title, ClaimValue = item, ClaimSwitch = (RoleWithClaim.Claims.Any(x => x.Value == item)) ? true : false });
+                    }
+                }
+            }
+            catch (Exception e)
+            {
+                await MainLayout.HandleException(e);
+            }
+            StateHasChanged();
+        }
+        catch (Exception e)
+        {
+            await MainLayout.HandleException(e);
+        }
+    }
+
+    async Task OnChange(bool? value, RoleClaimSwith roleClaim)
+    {
+        try
+        {
+            if (value == true)
+            {
+                RoleWithClaim = await RoleScreenUseCases.AssignClaimToRoleAsync(RoleWithClaim.Id, new ClaimDto { Value = roleClaim.ClaimValue, Type = CustomClaimTypes.APIPermission });
+                ShowNotification(new NotificationMessage { Severity = NotificationSeverity.Success, Summary = "İzin Ekle", Detail = $"{roleClaim.ClaimValue} izni {RoleWithClaim.Name} rolüne eklendi.", Duration = 4000 });
+            }
+            else
+            {
+                await RoleScreenUseCases.WithdrawClaimFromRoleAsync(RoleWithClaim.Id, roleClaim.ClaimValue);
+                ShowNotification(new NotificationMessage { Severity = NotificationSeverity.Info, Summary = "İzin Kaldır", Detail = $"{roleClaim.ClaimValue} izni {RoleWithClaim.Name} rolünden kaldırıldı.", Duration = 4000 });
+            }
+        }
+        catch (Exception e)
+        {
+            await MainLayout.HandleException(e);
+        }
+
+    }
+
+
+    void ShowNotification(NotificationMessage message)
+    {
+        NotificationService.Notify(message);
+    }
+}

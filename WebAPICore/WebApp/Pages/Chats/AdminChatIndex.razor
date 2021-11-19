@@ -1,0 +1,276 @@
+﻿@page "/chats"
+
+<link href="https://maxcdn.bootstrapcdn.com/font-awesome/4.7.0/css/font-awesome.min.css" rel="stylesheet" />
+
+@attribute [Authorize(Roles = Permission.Chats.View)]
+
+
+@inject IChatsScreenUseCases ChatsScreenUseCases
+@inject ISupplierCompaniesScreenUseCases SupplierCompaniesScreenUseCases
+@inject DialogService DialogService
+@inject NotificationService NotificationService
+
+
+<div style="height:50%;">
+    <div class="row">
+        <div class="col col-md-12">
+            <RadzenDataGrid @ref="_chatsGrid" AllowFiltering="true" FilterMode="FilterMode.Simple" AllowPaging="true" PageSizeOptions="@pageSizeOptions" AllowSorting="true" EditMode="DataGridEditMode.Single"
+                            Data="@_chats" IsLoading="@isLoading" LoadData="@LoadData" Count="@count" TItem="ChatDto" ColumnWidth="200px"
+                            SelectionMode="DataGridSelectionMode.Single" @bind-Value=@selectedChats RowSelect="OnInput">
+
+                <Columns>
+
+                    <RadzenDataGridColumn TItem="ChatDto" Property="SupplierCompanyId" Title="Supplier Company" FilterValue="@_companyFilterAttribute">
+                        <FilterTemplate>
+                            <RadzenDropDown AllowFiltering="true" @bind-Value="@_companyFilterAttribute" TextProperty="Name" ValueProperty="Id" Data="@_companiesDropdown" Change=@FilterChange />
+                        </FilterTemplate>
+
+                        <Template Context="chat">
+                            @chat.SupplierCompany.Name
+                        </Template>
+                    </RadzenDataGridColumn>
+
+                    <RadzenDataGridColumn TItem="ChatDto" Property="Request.No" Title="Request No">
+
+                    </RadzenDataGridColumn>
+
+                    <RadzenDataGridColumn TItem="ChatDto" Property="IsNewMessage" Title="Yeni Mesaj">
+
+                    </RadzenDataGridColumn>
+
+                </Columns>
+            </RadzenDataGrid>
+        </div>
+    </div>
+</div>
+
+
+<div class="pt-3" style="height:50%;">
+    <div class="row">
+        <div class="col col-md-6">
+            @{
+                if (selectedChats != null)
+                {
+                    <RadzenCard Style="height:60%;">
+                        <div class="py-2 px-4 border-bottom d-none d-lg-block">
+                            <div class="d-flex align-items-center py-1">
+                                <div class="position-relative">
+                                    <img src="https://bootdey.com/img/Content/avatar/avatar3.png" class="rounded-circle mr-1" alt="Sharon Lessman" width="40" height="40">
+                                </div>
+                                <div class="flex-grow-1 pl-3">
+                                    <strong>Sharon Lessman</strong>
+                                    <div class="text-muted small"><em>Typing...</em></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="chat-messages p-4">
+                            @foreach (var msg in Messages)
+                            {
+                                if (msg.AdminMessage)
+                                {
+                                    <div class="chat-message-right pb-4">
+                                        <div>
+                                            <img src="https://bootdey.com/img/Content/avatar/avatar1.png" class="rounded-circle mr-1" alt="Chris Wood" width="40" height="40">
+                                            <div class="text-muted small text-nowrap mt-2">@msg.SentTime.ToShortDateString()</div>
+                                        </div>
+                                        <div class="flex-shrink-1 bg-light rounded py-2 px-3 mr-3">
+                                            @msg.MessageText
+                                        </div>
+                                    </div>
+                                }
+                                else
+                                {
+                                    <div class="chat-message-left pb-4">
+                                        <div>
+                                            <img src="https://bootdey.com/img/Content/avatar/avatar3.png" class="rounded-circle mr-1" alt="Sharon Lessman" width="40" height="40">
+                                            <div class="text-muted small text-nowrap mt-2">@msg.SentTime.ToShortDateString()</div>
+                                        </div>
+                                        <div class="flex-shrink-1 bg-light rounded py-2 px-3 ml-3">
+                                            @msg.MessageText
+                                        </div>
+                                    </div>
+                                }
+                            }
+                        </div>
+
+
+                        <div class="flex-grow-0 py-3 px-4 border-top">
+                            <div class="input-group">
+                                <input type="text" @bind="MessageInput" @bind:event="oninput" @onkeydown="@KeyPress" class="form-control" placeholder="Type your message">
+                                <button @onclick="@Send" class="btn btn-primary">Send</button>
+                            </div>
+                        </div>
+                    </RadzenCard>
+                }
+                else
+                {
+                    <p>No Chats Avaliable</p>
+                }
+            }
+
+        </div>
+        <div class="col col-md-6">
+            <AdminRequestedProductRowComponent></AdminRequestedProductRowComponent>
+        </div>
+    </div>
+</div>
+
+
+
+@code {
+    [CascadingParameter(Name = "MainLayout")]
+    public MainLayout MainLayout { get; set; }
+    async Task HandleException(Exception e) => await MainLayout.HandleException(e);
+
+
+    private RadzenDataGrid<ChatDto> _chatsGrid;
+    private IEnumerable<ChatDto> _chats { get; set; }
+
+    int count = 1;
+    bool isLoading;
+    bool isCreate = false;
+    IEnumerable<int> pageSizeOptions = new int[] { 10, 25, 50, 100 };
+
+
+    private List<SupplierCompanyDto> _companiesDropdown { get; set; }
+    private int? _companyFilterAttribute { get; set; }
+
+
+
+    IList<ChatDto> selectedChats { get; set; }
+
+
+    public ChatDto chatDto { get; set; }
+
+    private HubConnection hubConnection;
+    public List<MessageDto> Messages { get; set; } = new List<MessageDto>();
+    public string MessageInput { get; set; }
+
+
+    protected override async Task OnInitializedAsync()
+    {
+        //set selected status all at start
+        //statusFilterValue = -1;
+
+        var response2 = await SupplierCompaniesScreenUseCases.ViewSupplierCompaniesAsync(new QueryParams());
+        _companiesDropdown = new List<SupplierCompanyDto>();
+        _companiesDropdown.Add(new SupplierCompanyDto { Id = -1, Name = "All" });
+        _companiesDropdown = _companiesDropdown.Concat(response2.Item2).ToList();
+
+        hubConnection = new HubConnectionBuilder()
+          .WithUrl("https://localhost:5001/chathub")
+          .Build();
+
+        hubConnection.On<Message>("ReceiveMessage", async (message) =>
+        {
+            if(message.AdminMessage == false)
+            {
+                await _chatsGrid.Reload();
+            }
+            if (message.Chat.SupplierCompanyId == chatDto.SupplierCompanyId &&
+                message.Chat.RequestId == chatDto.RequestId)
+            {
+                Messages.Add(new MessageDto
+                {
+                    AdminMessage = message.AdminMessage,
+                    MessageText = message.MessageText,
+                    SentTime = message.SentTime
+                });
+                StateHasChanged();
+            }
+        });
+
+        await hubConnection.StartAsync();
+    }
+
+    async Task OnInput()
+    {
+        try
+        {
+            Messages = new List<MessageDto>();
+            // Initial value is False
+
+            // Check Tokens if they are valid
+            chatDto = await ChatsScreenUseCases.ViewChatByIdAsync(selectedChats[0].Id);
+
+            await hubConnection.SendAsync("ReadMessage", selectedChats[0].Id);
+            if (chatDto != null)
+            {
+                Messages = chatDto.Messages.ToList();
+            }
+
+
+            StateHasChanged();
+        }
+        catch (Exception e)
+        {
+            Console.WriteLine(e.Message);
+
+        }
+    }
+
+    #region DataGrid Region
+
+    async Task LoadData(LoadDataArgs args)
+    {
+        isLoading = true;
+        try
+        {
+            QueryParams qp = new QueryParams();
+            qp.Page = args.Skip.Value;
+            qp.PostsPerPage = args.Top.Value;
+            qp.Sort = args.OrderBy.ToString();
+            qp.Filter = args.Filter;
+            qp.Filter = qp.Filter.Replace("(SupplierCompany == null ? null : SupplierCompany.Id) = -1", "(SupplierCompany != 0)");
+
+            var response = await ChatsScreenUseCases.ViewChatsAsync(qp);
+            count = response.Item1;
+            _chats = response.Item2;
+            isLoading = false;
+
+            if (selectedChats == null && count > 0)
+                selectedChats = _chats.Take(1).ToList();
+        }
+        catch (Exception e)
+        {
+            await MainLayout.HandleException(e);
+        }
+    }
+
+    #endregion
+
+    void ShowNotification(NotificationMessage message)
+    {
+        NotificationService.Notify(message);
+    }
+
+    async Task FilterChange()
+    {
+        await _chatsGrid.Reload();
+    }
+
+
+    public async Task Send()
+    {
+        Message message = new Message()
+        {
+            AdminMessage = true,
+            ChatId = selectedChats[0].Id,
+            Chat = new Chat { SupplierCompanyId = chatDto.SupplierCompanyId, Id = selectedChats[0].Id, RequestId = chatDto.RequestId },
+            MessageText = MessageInput,
+            SentTime = DateTime.Now
+        };
+
+        await hubConnection.SendAsync("SendMessage", message);
+        MessageInput = "";
+    }
+
+    public async Task KeyPress(KeyboardEventArgs e)
+    {
+        if (e.Code == "Enter" || e.Code == "NumpadEnter")
+        {
+            await Send();
+        }
+    }
+}

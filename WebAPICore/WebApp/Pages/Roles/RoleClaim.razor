@@ -1,0 +1,16 @@
+﻿@page "/roles"
+@attribute [Authorize(Roles = Permission.Roles.View)]
+
+<h3 class="alert alert-link pl-0">ROL YÖNETİMİ</h3>
+<div>
+    <div class="row">
+        <div class="col col-md-12">
+            <RolesRowComponent> </RolesRowComponent>
+        </div>
+    </div>
+</div>
+
+
+@code {
+
+}

@@ -1,0 +1,204 @@
+﻿@inject IResponsiblePeopleScreenUseCases ResponsiblePeopleScreenUseCases
+@inject NotificationService NotificationService
+@inject DialogService DialogService
+
+@using System.Text.Json;
+@using Core.AutoMapperDtos;
+@using Core.Pagination;
+
+<RadzenButton Icon="add_circle_outline" style="margin-bottom: 10px" Text="Add" Click="@InsertRow" />
+
+<RadzenDataGrid @ref="_scrpEmailGrid" AllowFiltering="true" FilterMode="FilterMode.Simple" AllowPaging="true" PageSizeOptions="@pageSizeOptions" AllowSorting="true" EditMode="DataGridEditMode.Single"
+                Data="@_scrpEmails" IsLoading="@isLoading" LoadData="@LoadData" Count="@count" TItem="SCRPEmailDto" RowUpdate="@OnUpdateRow" RowCreate="@OnCreateRow" ColumnWidth="200px">
+    <Columns>
+
+
+        <RadzenDataGridColumn TItem="SCRPEmailDto" Property="Email" Title="Email">
+            <EditTemplate Context="email">
+
+                <RadzenTextBox @bind-Value="email.Email" Style="width:100%; display: block" Name="Email" />
+                @{
+                    if (count == 1)
+                    {
+                        <RadzenRequiredValidator Text="Email zorunludur." Component="Email" Popup="false" />
+                    }
+
+                    else
+                    {
+                        <RadzenRequiredValidator Text="Email zorunludur." Component="Email" Popup="true" />
+                    }
+                }
+            </EditTemplate>
+        </RadzenDataGridColumn>
+
+        <RadzenDataGridColumn TItem="SCRPEmailDto" Context="sampleBlazorModelsSampleOrder" Filterable="false" Sortable="false" TextAlign="TextAlign.Center" Width="70px">
+            <Template Context="email">
+                <RadzenButton Icon="edit" Size="ButtonSize.Small" Click="@(args => EditRow(email))" @onclick:stopPropagation="true">
+                </RadzenButton>
+            </Template>
+            <EditTemplate Context="email">
+                <RadzenButton Icon="save" Size="ButtonSize.Small" Click="@((args) => SaveRow(email))">
+                </RadzenButton>
+                <RadzenButton Icon="cancel" Size="ButtonSize.Small" ButtonStyle="ButtonStyle.Secondary" Click="@((args) => CancelEdit(email))">
+                </RadzenButton>
+            </EditTemplate>
+        </RadzenDataGridColumn>
+        <RadzenDataGridColumn TItem="SCRPEmailDto" Context="email" Filterable="false" Sortable="false" TextAlign="TextAlign.Center" Width="70px">
+            <Template Context="email">
+                @{
+                    if (email.Id != 0)
+                    {
+                        <RadzenButton ButtonStyle="ButtonStyle.Danger" Icon="close" Size="ButtonSize.Small" @onclick:stopPropagation="true" Click=@(args => DeleteRow(email, _scrpEmailGrid)) />
+                    }
+                }
+            </Template>
+        </RadzenDataGridColumn>
+    </Columns>
+</RadzenDataGrid>
+
+@code {
+    [Parameter] public int ResponsiblePersonId { get; set; }
+    [Parameter] public MainLayout MainLayout { get; set; }
+    async Task HandleException(Exception e) => await MainLayout.HandleException(e);
+
+
+    RadzenDataGrid<SCRPEmailDto> _scrpEmailGrid;
+    private IEnumerable<SCRPEmailDto> _scrpEmails { get; set; }
+    int count;
+    bool isLoading;
+    bool isCreate = false;
+    IEnumerable<int> pageSizeOptions = new int[] { 10, 25, 50, 100 };
+
+    #region DataGrid Region
+
+    async Task LoadData(LoadDataArgs args)
+    {
+        isLoading = true;
+        try
+        {
+            QueryParams qp = new QueryParams();
+            qp.Page = args.Skip.Value;
+            qp.PostsPerPage = args.Top.Value;
+            qp.Sort = args.OrderBy.ToString();
+            qp.Filter = args.Filter;
+
+            var response = await ResponsiblePeopleScreenUseCases.ViewResponsiblePersonWithEmailsAsync(ResponsiblePersonId, qp);
+            count = response.Item1;
+            _scrpEmails = response.Item2.Emails;
+            isLoading = false;
+        }
+        catch (Exception e)
+        {
+            await MainLayout.HandleException(e);
+        }
+    }
+
+    async Task OnUpdateRow(SCRPEmailDto SCRPEmailDto)
+    {
+        if (SCRPEmailDto.Id == 0)
+        {
+            await OnCreateRow(SCRPEmailDto);
+        }
+        else
+        {
+            try
+            {
+                await ResponsiblePeopleScreenUseCases.UpdateEmailToSCRP(SCRPEmailDto.Id, SCRPEmailDto);
+                ShowNotification(new NotificationMessage { Severity = NotificationSeverity.Success, Summary = "Email Güncelle", Detail = $"{SCRPEmailDto.Email} başarıyla güncellendi.", Duration = 4000 });
+            }
+            catch (Exception e)
+            {
+                await MainLayout.HandleException(e);
+            }
+            EditRow(SCRPEmailDto);
+        }
+    }
+
+    async Task OnCreateRow(SCRPEmailDto SCRPEmailDto)
+    {
+        try
+        {
+            SCRPEmailDto.ResponsiblePersonId = ResponsiblePersonId;
+            var response = await ResponsiblePeopleScreenUseCases.CreateEmailToSCRP(SCRPEmailDto);
+            ShowNotification(new NotificationMessage { Severity = NotificationSeverity.Success, Summary = "Email Ekle", Detail = $"{response.Email} başarıyla eklendi.", Duration = 4000 });
+            isCreate = false;
+            await _scrpEmailGrid.Reload();
+        }
+        catch (Exception e)
+        {
+            await MainLayout.HandleException(e);
+            await InsertRow(SCRPEmailDto);
+        }
+    }
+
+
+    void EditRow(SCRPEmailDto SCRPEmailDto)
+    {
+        _scrpEmailGrid.EditRow(SCRPEmailDto);
+    }
+
+    void SaveRow(SCRPEmailDto SCRPEmailDto)
+    {
+        _scrpEmailGrid.UpdateRow(SCRPEmailDto);
+        isCreate = false;
+    }
+
+    void CancelEdit(SCRPEmailDto SCRPEmailDto)
+    {
+        _scrpEmailGrid.CancelEditRow(SCRPEmailDto);
+        if (SCRPEmailDto.Id == 0)
+            count--;
+        isCreate = false;
+        _scrpEmailGrid.Reload();
+    }
+
+    async Task DeleteRow(SCRPEmailDto SCRPEmailDto, RadzenDataGrid<SCRPEmailDto> radzenDataGrid)
+    {
+        bool? flag = false;
+        flag = await DialogService.Confirm($"{SCRPEmailDto.Email} silmek istediğinize emin misiniz?", "Email Sil", new ConfirmOptions() { OkButtonText = "Evet", CancelButtonText = "Hayır" });
+        if (flag == true)
+        {
+            try
+            {
+                await ResponsiblePeopleScreenUseCases.DeleteEmailToSCRP(SCRPEmailDto.ResponsiblePersonId,SCRPEmailDto.Id);
+                ShowNotification(new NotificationMessage { Severity = NotificationSeverity.Success, Summary = "Email Sil", Detail = $"{SCRPEmailDto.Email} başarıyla silindi.", Duration = 4000 });
+                await radzenDataGrid.Reload();
+            }
+            catch (Exception e)
+            {
+                await MainLayout.HandleException(e);
+            }
+        }
+    }
+
+    async Task InsertRow()
+    {
+        if (isCreate == false)
+        {
+            await _scrpEmailGrid.Reload();
+            await _scrpEmailGrid.InsertRow(new SCRPEmailDto());
+            count++;
+        }
+        isCreate = true;
+    }
+
+    async Task InsertRow(SCRPEmailDto SCRPEmailDto)
+    {
+        if (isCreate == false)
+        {
+            await _scrpEmailGrid.Reload();
+            await _scrpEmailGrid.InsertRow(SCRPEmailDto);
+            count++;
+        }
+        isCreate = true;
+    }
+
+    #endregion
+
+
+    void ShowNotification(NotificationMessage message)
+    {
+        NotificationService.Notify(message);
+    }
+
+}

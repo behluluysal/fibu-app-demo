@@ -1,0 +1,131 @@
+﻿@inject IProductsScreenUseCases ProductsScreenUseCases
+@inject ITagsScreenUseCases TagScreensSuseCases
+@inject NotificationService NotificationService
+@inject DialogService dialogService
+
+@using System.Text.Json;
+@using Core.AutoMapperDtos;
+@using Core.Pagination;
+
+
+
+
+<RadzenCard Style="margin-bottom: 20px;">
+
+    @{
+        if (_productWithTags != null)
+        {
+            <style>
+                .pr_details * {
+                    font-size: small;
+                }
+            </style>
+            <div class="row pr_details">
+                <div class="col-12"><b>Açıklama:</b> @_productWithTags.Description</div>
+                <div class="col-12">
+                    <div class="row">
+                        <div class="col-12"><b>Etiket eklemek için seçiniz:</b></div>
+                        <div class="col-12 mt-2">
+                            <RadzenDropDown AllowClear="true" AllowFiltering="true" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive"
+                                @bind-Value=@multipleValues Multiple="true" Data=@(_allTags) Placeholder="Seçiniz..." TextProperty="Name" ValueProperty="Id"
+                                />
+                            <RadzenButton Click="@((args) => SaveTagsToProduct())" ButtonStyle="ButtonStyle.Secondary" Icon="check" Style="vertical-align: top;" />
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+    }
+</RadzenCard>
+<div class="row">
+    <div class="col-md-12 text-right">
+        <RadzenButton Click="@((args) => dialogService.Close(true))" ButtonStyle="ButtonStyle.Secondary" Text="Kapat" Style="margin-bottom: 10px; width: 150px" />
+    </div>
+</div>
+
+@code {
+    [Parameter] public int ProductId { get; set; }
+    [Parameter] public MainLayout MainLayout { get; set; }
+    async Task HandleException(Exception e) => await MainLayout.HandleException(e);
+
+
+    public ProductWithTagDto _productWithTags;
+
+    private IEnumerable<TagDto> _allTags { get; set; }
+    IEnumerable<int> multipleValues = new List<int>();
+
+
+
+    protected override async Task OnParametersSetAsync()
+    {
+        try
+        {
+            var response = await ProductsScreenUseCases.ViewProductTagsAsync(ProductId, new QueryParams());
+            Console.WriteLine("test");
+            _productWithTags = response.Item2;
+            // Adding tag ids to multipleValues for Assign Withdraw Dropdown
+            List<int> temp = new List<int>();
+            foreach (var item in _productWithTags.Tags)
+            {
+                temp.Add(item.Id);
+            }
+            multipleValues = multipleValues.Concat(temp);
+            var response2 = await TagScreensSuseCases.ViewTagsAsync(new QueryParams());
+            _allTags = response2.Item2;
+
+        }
+        catch (Exception e)
+        {
+            await HandleException(e);
+        }
+    }
+
+
+    public async Task SaveTagsToProduct()
+    {
+        try
+        {
+            if(multipleValues == null)
+            {
+                foreach (var item in _productWithTags.Tags)
+                {
+                    await ProductsScreenUseCases.WithdrawTagFromProductAsync(_productWithTags.Id, item.Id);
+                    ShowNotification(new NotificationMessage { Severity = NotificationSeverity.Info, Summary = "Etiket Kaldır", Detail = $"Etiket {_productWithTags.Name} ürününden başarıyla kaldırıldı.", Duration = 4000 });
+                }
+            }
+            else
+            {
+                foreach (var item in multipleValues)
+                {
+                    if (!_productWithTags.Tags.Any(x => x.Id == item))
+                    {
+                        await ProductsScreenUseCases.AssignTagToProductAsync(_productWithTags.Id, item);
+                        ShowNotification(new NotificationMessage { Severity = NotificationSeverity.Success, Summary = "Etiket Ekle", Detail = $"Etilet {_productWithTags.Name} ürününe başarıyla eklendi.", Duration = 4000 });
+                    }
+                }
+                var responset = await ProductsScreenUseCases.ViewProductTagsAsync(ProductId, new QueryParams());
+                _productWithTags = responset.Item2;
+                foreach (var item in _productWithTags.Tags)
+                {
+                    if (!(multipleValues).Contains(item.Id))
+                    {
+                        await ProductsScreenUseCases.WithdrawTagFromProductAsync(_productWithTags.Id, item.Id);
+                        ShowNotification(new NotificationMessage { Severity = NotificationSeverity.Info, Summary = "Etiket Kaldır", Detail = $"Etiket {_productWithTags.Name} ürününden başarıyla kaldırıldı.", Duration = 4000 });
+                    }
+                }
+            }
+            var response = await ProductsScreenUseCases.ViewProductTagsAsync(ProductId, new QueryParams());
+            _productWithTags = response.Item2;
+
+        }
+        catch (Exception e)
+        {
+            await HandleException(e);
+        }
+    }
+
+    void ShowNotification(NotificationMessage message)
+    {
+        NotificationService.Notify(message);
+    }
+}

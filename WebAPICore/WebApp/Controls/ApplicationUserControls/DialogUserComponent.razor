@@ -1,0 +1,130 @@
+﻿@inject IApplicationUsersScreenUseCases ApplicationUserUseCases
+@inject IRolesScreenUseCases RoleScreenUseCases
+@inject NotificationService NotificationService
+@inject DialogService dialogService
+
+@using System.Text.Json;
+@using Core.AutoMapperDtos;
+@using Core.Pagination;
+
+
+
+
+<RadzenCard Style="margin-bottom: 20px;">
+
+    @{
+        if (SystemRoles != null)
+        {
+            foreach (var item in test)
+            {
+                if (UserWithRoles.Roles.Any(x => x.Id == item.Role.Id))
+                {
+                    <label class="form-check-label" for="flexSwitchCheckDefault">@item.Role.Name</label>
+                    <RadzenSwitch @bind-Value="item.RoleSwitch" Style="margin-bottom: 20px" Change=@(args => OnChange(args, item.Role)) />
+                }
+                else
+                {
+                    <label class="form-check-label" for="flexSwitchCheckDefault">@item.Role.Name</label>
+                    <RadzenSwitch @bind-Value="item.RoleSwitch" Style="margin-bottom: 20px" Change=@(args => OnChange(args, item.Role)) />
+                }
+            }
+        }
+    }
+</RadzenCard>
+<div class="row">
+    <div class="col-md-12 text-right">
+        <RadzenButton Click="@((args) => dialogService.Close(true))" ButtonStyle="ButtonStyle.Secondary" Text="OK" Style="margin-bottom: 10px; width: 150px" />
+    </div>
+</div>
+
+@code {
+    [Parameter] public string userId { get; set; }
+
+    public class AssignRoleToUserViewModel
+    {
+        public RoleDto Role { get; set; }
+        public bool RoleSwitch { get; set; }
+    }
+
+
+    public Guid Guid = Guid.NewGuid();
+    public string ModalDisplay = "none;";
+    public string ModalClass = "";
+    public bool ShowBackdrop = false;
+    ApplicationUserWithRoleDto UserWithRoles = null;
+    IEnumerable<RoleDto> SystemRoles = null;
+
+    List<AssignRoleToUserViewModel> test = new List<AssignRoleToUserViewModel>();
+
+
+
+    protected override async Task OnParametersSetAsync()
+    {
+        try
+        {
+            test = new List<AssignRoleToUserViewModel>();
+            var response = await RoleScreenUseCases.ViewRolesAsync(new QueryParams());
+            SystemRoles = response.Item2;
+            UserWithRoles = await ApplicationUserUseCases.GetRolesAsync(userId);
+
+            foreach (var item in SystemRoles)
+            {
+                test.Add(new AssignRoleToUserViewModel { Role = item, RoleSwitch = (UserWithRoles.Roles.Any(x => x.Id == item.Id)) ? true : false });
+            }
+        }
+        catch (Exception e)
+        {
+            JsonElement JsonErrors = JsonSerializer.Deserialize<dynamic>(e.Message);
+            if (JsonErrors.TryGetProperty("validationErrors", out var validationErrors))
+            {
+                foreach (var error in validationErrors.EnumerateArray())
+                {
+                    ShowNotification(new NotificationMessage { Severity = NotificationSeverity.Error, Summary = error.GetProperty("name").ToString(), Detail = error.GetProperty("reason").ToString(), Duration = 4000 });
+                }
+            }
+            else
+            {
+                ShowNotification(new NotificationMessage { Severity = NotificationSeverity.Error, Summary = "Error", Detail = JsonErrors.GetProperty("title").ToString(), Duration = 4000 });
+            }
+        }
+    }
+
+    async Task OnChange(bool? value, RoleDto role)
+    {
+        try
+        {
+            if (value == true)
+            {
+                UserWithRoles = await ApplicationUserUseCases.AssignRoleToUser(UserWithRoles.Id, role.Id);
+                ShowNotification(new NotificationMessage { Severity = NotificationSeverity.Success, Summary = "Rol Ekle", Detail = $"{role.Name} rolü kullanıcıya başarıyla eklendi.", Duration = 4000 });
+            }
+            else
+            {
+                await ApplicationUserUseCases.WithdrawRoleFromUser(UserWithRoles.Id, role.Id);
+                ShowNotification(new NotificationMessage { Severity = NotificationSeverity.Info, Summary = "Rol Kaldır", Detail = $"{role.Name} rolü kullanıcıdan başarıyla kaldırıldı.", Duration = 4000 });
+            }
+        }
+        catch (Exception e)
+        {
+            JsonElement JsonErrors = JsonSerializer.Deserialize<dynamic>(e.Message);
+            if (JsonErrors.TryGetProperty("validationErrors", out var validationErrors))
+            {
+                foreach (var error in validationErrors.EnumerateArray())
+                {
+                    ShowNotification(new NotificationMessage { Severity = NotificationSeverity.Error, Summary = error.GetProperty("name").ToString(), Detail = error.GetProperty("reason").ToString(), Duration = 4000 });
+                }
+            }
+            else
+            {
+                ShowNotification(new NotificationMessage { Severity = NotificationSeverity.Error, Summary = "Error", Detail = JsonErrors.GetProperty("title").ToString(), Duration = 4000 });
+            }
+        }
+
+    }
+
+
+    void ShowNotification(NotificationMessage message)
+    {
+        NotificationService.Notify(message);
+    }
+}

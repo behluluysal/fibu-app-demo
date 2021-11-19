@@ -1,0 +1,83 @@
+﻿@inherits LayoutComponentBase
+@inject NotificationService NotificationService
+@inject IAuthenticationUseCases AuthenticationUseCases
+@inject NavigationManager navigationManager
+
+<RadzenNotification />
+<RadzenDialog />
+<div class="page">
+    <div class="sidebar @NavMenuCssClass">
+        <NavMenu />
+
+    </div>
+
+    <div class="main">
+        <div class="top-row px-4">
+            <button class="navbar-toggler" @onclick="ToggleNavMenu" style="display:inline-block !important;">
+                <RadzenIcon Icon="list" />
+            </button>
+            <div class="ml-md-auto">
+                <AuthorizeView>
+                    <Authorized>
+                        <LoginStatusComponent></LoginStatusComponent>
+                    </Authorized>
+                </AuthorizeView>
+            </div>
+        </div>
+
+        <div class="content px-4">
+
+            <CascadingValue Value="this" Name="MainLayout">
+                @Body
+            </CascadingValue>
+        </div>
+    </div>
+</div>
+
+@code{
+    private bool collapseNavMenu = true;
+
+    private string NavMenuCssClass => !collapseNavMenu ? "collapse" : null;
+
+    private void ToggleNavMenu()
+    {
+        collapseNavMenu = !collapseNavMenu;
+    }
+
+    public async Task HandleException(Exception exception)
+    {
+        if (exception.Message.Contains("401"))
+        {
+            await AuthenticationUseCases.Logout();
+            navigationManager.NavigateTo("/login/Expired", true);
+            return;
+        }
+        JsonElement Response;
+        try
+        {
+            Response = JsonSerializer.Deserialize<dynamic>(exception.Message.ToString());
+            JsonElement errors;
+            if(Response.TryGetProperty("validationErrors", out errors) && errors.ValueKind != JsonValueKind.Null)
+            {
+                foreach (var error in errors.EnumerateArray())
+                {
+                    ShowNotification(new NotificationMessage { Severity = NotificationSeverity.Error, Summary = error.GetProperty("name").ToString(), Detail = error.GetProperty("reason").ToString(), Duration = 4000 });
+                }
+            }
+            else
+            {
+                ShowNotification(new NotificationMessage { Severity = NotificationSeverity.Error, Summary = "Error", Detail = Response.GetProperty("title").ToString(), Duration = 4000 });
+            }
+        }
+        catch (Exception e)
+        {
+            ShowNotification(new NotificationMessage { Severity = NotificationSeverity.Error, Summary = "Error", Detail = exception.Message, Duration = 4000 });
+        }
+    }
+
+
+    void ShowNotification(NotificationMessage message)
+    {
+        NotificationService.Notify(message);
+    }
+}

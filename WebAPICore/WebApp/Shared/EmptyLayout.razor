@@ -1,0 +1,49 @@
+﻿@inherits LayoutComponentBase
+@inject NotificationService NotificationService
+
+<RadzenNotification />
+<RadzenDialog />
+
+<CascadingValue Value="this" Name="EmptyLayout">
+    @Body
+</CascadingValue>
+
+
+
+@code{
+
+    public void HandleException(Exception exception)
+    {
+        JsonElement Response;
+        try
+        {
+            Response = JsonSerializer.Deserialize<dynamic>(exception.Message);
+            if (exception.Message.Contains("401"))
+            {
+                ShowNotification(new NotificationMessage { Severity = NotificationSeverity.Error, Summary = "Error", Detail = Response.GetProperty("title").ToString(), Duration = 4000 });
+                return;
+            }
+            if (Response.GetProperty("validationErrors").EnumerateArray().Count() != 0)
+            {
+                foreach (var error in Response.GetProperty("validationErrors").EnumerateArray())
+                {
+                    ShowNotification(new NotificationMessage { Severity = NotificationSeverity.Error, Summary = error.GetProperty("name").ToString(), Detail = error.GetProperty("reason").ToString(), Duration = 4000 });
+                }
+            }
+            else
+            {
+                ShowNotification(new NotificationMessage { Severity = NotificationSeverity.Error, Summary = "Error", Detail = Response.GetProperty("title").ToString(), Duration = 4000 });
+            }
+        }
+        catch (Exception)
+        {
+            ShowNotification(new NotificationMessage { Severity = NotificationSeverity.Error, Summary = "Error", Detail = exception.Message, Duration = 4000 });
+        }
+    }
+
+
+    void ShowNotification(NotificationMessage message)
+    {
+        NotificationService.Notify(message);
+    }
+}

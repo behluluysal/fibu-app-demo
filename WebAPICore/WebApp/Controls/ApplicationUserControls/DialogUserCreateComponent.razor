@@ -1,0 +1,88 @@
+﻿@inject DialogService dialogService
+@inject NotificationService NotificationService
+@inject NavigationManager navigationManager
+@using System.ComponentModel.DataAnnotations
+
+@inject IApplicationUsersScreenUseCases ApplicationUsersScreenUseCases
+
+<RadzenCard>
+    <div class="row">
+        <div class="col-12 row">
+            <label class="custom-control-label col-4">Email</label>
+            <input type="email" @bind-value="_email" class="form-control col-8" />
+        </div>
+        <div class="col-12 row">
+            <label class="custom-control-label col-4">Şifre</label>
+            <input type="text" @bind-value="_password" class="form-control col-8" />
+        </div>
+        <div class="col-12 row">
+            <label class="custom-control-label col-4">Şifre Tekrar</label>
+            <input type="text" @bind-value="_confirmPassword" class="form-control col-8" />
+        </div>
+    </div>
+</RadzenCard>
+<div class="row">
+    <div class="col-md-12 text-right">
+        <RadzenButton Click="@CreateUser" ButtonStyle="ButtonStyle.Success" Text="Onayla" Style="margin-bottom: 10px; width: 150px" />
+        <RadzenButton Click="@((args) => dialogService.Close(true))" ButtonStyle="ButtonStyle.Danger" Text="İptal" Style="margin-bottom: 10px; width: 150px" />
+    </div>
+</div>
+
+
+
+@code {
+    [Parameter] public RadzenDataGrid<ApplicationUserDto> _usersGrid { get; set; }
+    [Parameter] public MainLayout MainLayout { get; set; }
+    async Task HandleException(Exception e) => await MainLayout.HandleException(e);
+
+
+    private string _email { get; set; }
+    private string _password { get; set; }
+    private string _confirmPassword { get; set; }
+
+    private async Task CreateUser()
+    {
+        try
+        {
+            var _control = new EmailAddressAttribute();
+            if (!_control.IsValid(_email))
+            {
+                ShowNotification(new NotificationMessage { Severity = NotificationSeverity.Error, Summary = "Hata", Detail = "Lütfen geçerli bir email adresi giriniz.", Duration = 4000 });
+                return;
+            }
+            if (_password.Length < 7)
+            {
+                ShowNotification(new NotificationMessage { Severity = NotificationSeverity.Error, Summary = "Hata", Detail = "Şifre en az 7 karakter olmalıdır.", Duration = 4000 });
+                return;
+            }
+            if(_password != _confirmPassword)
+            {
+                ShowNotification(new NotificationMessage { Severity = NotificationSeverity.Error, Summary = "Hata", Detail = "Şifreler eşleşmelidir.", Duration = 4000 });
+                return;
+            }
+
+            CreateUserViewModel createUserViewModel = new CreateUserViewModel
+            {
+                Email = _email,
+                UserName = _email,
+                Password = _password,
+                ConfirmPassword = _confirmPassword
+            };
+
+            await ApplicationUsersScreenUseCases.CreateUserAsync(createUserViewModel);
+            ShowNotification(new NotificationMessage { Severity = NotificationSeverity.Success, Summary = "Teklif Ekle", Detail = $"Teklifiniz başarıyla oluşturuldu.", Duration = 4000 });
+            _usersGrid.Reload();
+            dialogService.Close(true);
+        }
+        catch (Exception exception)
+        {
+            await HandleException(exception);
+        }
+    }
+
+    void ShowNotification(NotificationMessage message)
+    {
+        NotificationService.Notify(message);
+    }
+
+}

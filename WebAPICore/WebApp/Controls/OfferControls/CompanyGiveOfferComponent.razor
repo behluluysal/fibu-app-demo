@@ -1,0 +1,80 @@
+﻿@inject DialogService dialogService
+@inject NotificationService NotificationService
+@inject NavigationManager navigationManager
+
+@inject IAuthenticationUseCases AuthenticationUseCases
+@inject IOfferScreenUseCases OfferScreenUseCases
+
+<RadzenCard>
+    <div class="row">
+        <div class="col-12">
+            <b>Teklif Giriniz: </b> <input type="number" min="0" step="any" @bind-value="amount" />
+        </div>
+    </div>
+</RadzenCard>
+<div class="row">
+    <div class="col-md-12 text-right">
+        <RadzenButton Click="@SendOffer" ButtonStyle="ButtonStyle.Success" Text="Onayla" Style="margin-bottom: 10px; width: 150px" />
+        <RadzenButton Click="@((args) => dialogService.Close(true))" ButtonStyle="ButtonStyle.Danger" Text="İptal" Style="margin-bottom: 10px; width: 150px" />
+    </div>
+</div>
+
+
+
+@code {
+    [Parameter] public int RequestedProductId { get; set; }
+    [Parameter] public int SupplierCompanyId { get; set; }
+    [Parameter] public string scid { get; set; }
+
+    private double amount { get; set; }
+
+    private async Task SendOffer()
+    {
+        try
+        {
+            OfferCreateDto offerCreate = new OfferCreateDto();
+            offerCreate.RequestedProductId = RequestedProductId;
+            offerCreate.SupplierCompanyId = SupplierCompanyId;
+            offerCreate.Amount = amount;
+            await OfferScreenUseCases.CreateOfferAsync(offerCreate);
+            ShowNotification(new NotificationMessage { Severity = NotificationSeverity.Success, Summary = "Teklif Ekle", Detail = $"Teklifiniz başarıyla oluşturuldu.", Duration = 4000 });
+            dialogService.Close(true);
+        }
+        catch (Exception exception)
+        {
+            if (exception.Message.Contains("401"))
+            {
+                await AuthenticationUseCases.Logout();
+                navigationManager.NavigateTo($"/company-chat/{scid}", true);
+                return;
+            }
+            JsonElement Response;
+            try
+            {
+                Response = JsonSerializer.Deserialize<dynamic>(exception.Message.ToString());
+                JsonElement errors;
+                if (Response.TryGetProperty("validationErrors", out errors) && errors.ValueKind != JsonValueKind.Null)
+                {
+                    foreach (var error in errors.EnumerateArray())
+                    {
+                        ShowNotification(new NotificationMessage { Severity = NotificationSeverity.Error, Summary = error.GetProperty("name").ToString(), Detail = error.GetProperty("reason").ToString(), Duration = 4000 });
+                    }
+                }
+                else
+                {
+                    ShowNotification(new NotificationMessage { Severity = NotificationSeverity.Error, Summary = "Error", Detail = Response.GetProperty("title").ToString(), Duration = 4000 });
+                }
+            }
+            catch (Exception e)
+            {
+                ShowNotification(new NotificationMessage { Severity = NotificationSeverity.Error, Summary = "Error", Detail = exception.Message, Duration = 4000 });
+            }
+        }
+    }
+
+    void ShowNotification(NotificationMessage message)
+    {
+        NotificationService.Notify(message);
+    }
+
+}

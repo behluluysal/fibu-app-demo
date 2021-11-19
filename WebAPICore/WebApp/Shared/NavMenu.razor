@@ -1,0 +1,108 @@
+﻿<div class="top-row pl-4 navbar navbar-dark">
+    <a class="navbar-brand" href="">WebApp</a>
+    <button class="navbar-toggler" @onclick="ToggleNavMenu">
+        <span class="navbar-toggler-icon"></span>
+    </button>
+</div>
+
+<div class="@NavMenuCssClass" @onclick="ToggleNavMenu">
+    <ul class="nav flex-column">
+        <AuthorizeView Roles="@Permission.Dashboards.View">
+            <Authorized>
+                <li class="nav-item px-3">
+                    <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
+                        <RadzenIcon Icon="home" Style="margin-right:5px;" /> Anasayfa
+                    </NavLink>
+                </li>
+            </Authorized>
+        </AuthorizeView>
+
+        <AuthorizeView Roles="@Permission.Users.View">
+            <Authorized>
+                <li class="nav-item px-3">
+                    <NavLink class="nav-link" href="users">
+                        <RadzenIcon Icon="people" Style="margin-right:5px;" /> Kullanıcılar
+                    </NavLink>
+                </li>
+            </Authorized>
+        </AuthorizeView>
+
+        <AuthorizeView Roles="@Permission.Tags.View">
+            <Authorized>
+                <li class="nav-item px-3">
+                    <NavLink class="nav-link" href="tags">
+                        <RadzenIcon Icon="tags" Style="margin-left:8px;" /> Etiketler
+                    </NavLink>
+                </li>
+            </Authorized>
+        </AuthorizeView>
+
+        <AuthorizeView Roles="@Permission.Roles.View">
+            <Authorized>
+                <li class="nav-item px-3">
+                    <NavLink class="nav-link" href="roles">
+                        <RadzenIcon Icon="security" Style="margin-right: 7px; margin-left: -2px;" /> Roller
+                    </NavLink>
+                </li>
+            </Authorized>
+        </AuthorizeView>
+
+        <AuthorizeView Roles="@Permission.Products.View">
+            <Authorized>
+                <li class="nav-item px-3">
+                    <NavLink class="nav-link" href="products">
+                        <RadzenIcon Icon="widgets" Style="margin-left: -2px; margin-right: 9px;" /> Ürünler
+                    </NavLink>
+                </li>
+            </Authorized>
+        </AuthorizeView>
+        <AuthorizeView Roles="@Permission.SupplierCompanies.View">
+            <Authorized>
+                <li class="nav-item px-3">
+                    <NavLink class="nav-link" href="supplier-companies">
+                        <RadzenIcon Icon="store" Style="margin-left: -2px; margin-right: 9px;" /> Sağlayıcı Firmalar
+                    </NavLink>
+                </li>
+            </Authorized>
+        </AuthorizeView>
+        <AuthorizeView Roles="@Permission.BusinessPartners.View">
+            <Authorized>
+                <li class="nav-item px-3">
+                    <NavLink class="nav-link" href="business-partners">
+                        <RadzenIcon Icon="business" Style="margin-left: -2px; margin-right: 9px;" /> İş Ortakları
+                    </NavLink>
+                </li>
+            </Authorized>
+        </AuthorizeView>
+        <AuthorizeView Roles="@Permission.Requests.View">
+            <Authorized>
+                <li class="nav-item px-3">
+                    <NavLink class="nav-link" href="requests">
+                        <RadzenIcon Icon="receipt_long" Style="margin-left: -4px; margin-right: 10px;" /> İstekler
+                    </NavLink>
+                </li>
+            </Authorized>
+        </AuthorizeView>
+        <AuthorizeView Roles="@Permission.Chats.View">
+            <Authorized>
+                <li class="nav-item px-3">
+                    <NavLink class="nav-link" href="chats">
+                        <RadzenIcon Icon="question_answer" Style="margin-left: -4px; margin-right: 10px;" /> Chats
+                    </NavLink>
+                </li>
+            </Authorized>
+        </AuthorizeView>
+
+    </ul>
+</div>
+
+@code {
+    private bool collapseNavMenu = true;
+
+    private string NavMenuCssClass => collapseNavMenu ? "collapse" : null;
+
+    private void ToggleNavMenu()
+    {
+        collapseNavMenu = !collapseNavMenu;
+    }
+}

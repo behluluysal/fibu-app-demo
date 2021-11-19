@@ -1,0 +1,220 @@
+﻿@inject IRolesScreenUseCases RolesScreenUseCases
+@inject DialogService DialogService
+@inject NotificationService NotificationService
+
+<RadzenButton Icon="add_circle_outline" style="margin-bottom: 10px" Text="Add" Click="@InsertRow" />
+<RadzenDataGrid @ref="_rolesGrid" AllowFiltering="true" FilterMode="FilterMode.Simple" AllowPaging="true" PageSizeOptions="@pageSizeOptions" AllowSorting="true" EditMode="DataGridEditMode.Single"
+                Data="@_roles" IsLoading="@isLoading" LoadData="@LoadData" Count="@count" TItem="RoleDto" RowUpdate="@OnUpdateRow" RowCreate="@OnCreateRow" ColumnWidth="200px">
+
+    <Columns>
+        <RadzenDataGridColumn Width="70px" TItem="RoleDto" Property="Id" Title="İzinler" Filterable="false" Sortable="false" TextAlign="TextAlign.Center">
+            <Template Context="role">
+                @{
+                    if (role.Id != null)
+                    {
+                        <RadzenButton ButtonStyle="ButtonStyle.Secondary" Icon="list" Click=@(() => OpenRole(role.Name, role.Id, MainLayout)) Text="" />
+                    }
+                }
+            </Template>
+        </RadzenDataGridColumn>
+
+
+
+
+        <RadzenDataGridColumn TItem="RoleDto" Property="Name" Title="Rol Adı">
+            <EditTemplate Context="role">
+                <RadzenTextBox @bind-Value="role.Name" Style="width:100%; display: block" Name="Name" />
+                @{
+                    if (count == 1)
+                    {
+                        <RadzenRequiredValidator Text="Role name is required" Component="Name" Popup="false" />
+                    }
+
+                    else
+                    {
+                        <RadzenRequiredValidator Text="Role name is required" Component="Name" Popup="true" />
+                    }
+                }
+            </EditTemplate>
+        </RadzenDataGridColumn>
+
+        <RadzenDataGridColumn TItem="RoleDto" Context="sampleBlazorModelsSampleOrder" Filterable="false" Sortable="false" TextAlign="TextAlign.Center" Width="70px">
+            <Template Context="role">
+                <RadzenButton Icon="edit" Size="ButtonSize.Small" Click="@(args => EditRow(role))" @onclick:stopPropagation="true">
+                </RadzenButton>
+            </Template>
+            <EditTemplate Context="role">
+                <RadzenButton Icon="save" Size="ButtonSize.Small" Click="@((args) => SaveRow(role))">
+                </RadzenButton>
+                <RadzenButton Icon="cancel" Size="ButtonSize.Small" ButtonStyle="ButtonStyle.Secondary" Click="@((args) => CancelEdit(role))">
+                </RadzenButton>
+            </EditTemplate>
+        </RadzenDataGridColumn>
+
+        <RadzenDataGridColumn TItem="RoleDto" Context="user" Filterable="false" Sortable="false" TextAlign="TextAlign.Center" Width="70px">
+            <Template Context="role">
+                @{
+                    if (role.Id != null)
+                    {
+                                <RadzenButton ButtonStyle="ButtonStyle.Danger" Icon="close" Size="ButtonSize.Small" @onclick:stopPropagation="true" Click=@(args => DeleteRow(role, _rolesGrid)) />
+                    }
+                }
+            </Template>
+        </RadzenDataGridColumn>
+
+
+    </Columns>
+</RadzenDataGrid>
+
+@code {
+    [CascadingParameter(Name = "MainLayout")]
+    public MainLayout MainLayout { get; set; }
+    async Task HandleException(Exception e) => await MainLayout.HandleException(e);
+
+
+    private RadzenDataGrid<RoleDto> _rolesGrid;
+    private IEnumerable<RoleDto> _roles { get; set; }
+
+
+    int count = 1;
+    bool isLoading;
+    bool isCreate = false;
+    IEnumerable<int> pageSizeOptions = new int[] { 10, 25, 50, 100 };
+
+    #region DataGrid Region
+
+    async Task LoadData(LoadDataArgs args)
+    {
+        isLoading = true;
+        try
+        {
+            QueryParams qp = new QueryParams();
+            qp.Page = args.Skip.Value;
+            qp.PostsPerPage = args.Top.Value;
+            qp.Sort = args.OrderBy.ToString();
+            qp.Filter = args.Filter;
+
+            var response = await RolesScreenUseCases.ViewRolesAsync(qp);
+            count = response.Item1;
+            _roles = response.Item2;
+            isLoading = false;
+        }
+        catch (Exception e)
+        {
+            await MainLayout.HandleException(e);
+        }
+    }
+
+    async Task OnUpdateRow(RoleDto role)
+    {
+        if (role.Id == "0")
+        {
+            await OnCreateRow(role);
+            return;
+        }
+        try
+        {
+            await RolesScreenUseCases.UpdateRoleAsync(role.Id, role);
+            ShowNotification(new NotificationMessage { Severity = NotificationSeverity.Success, Summary = "Rol Güncelle", Detail = $"Rol {role.Name} başarılı bir şekilde güncellendi.", Duration = 4000 });
+
+        }
+        catch (Exception e)
+        {
+            await MainLayout.HandleException(e);
+            EditRow(role);
+        }
+    }
+
+    async Task OnCreateRow(RoleDto role)
+    {
+        try
+        {
+            var response = await RolesScreenUseCases.CreateRoleAsync(role);
+            ShowNotification(new NotificationMessage { Severity = NotificationSeverity.Success, Summary = "Rol Ekle", Detail = $"Rol {role.Name} başarılı bir şekilde eklendi.", Duration = 4000 });
+            isCreate = false;
+            await _rolesGrid.Reload();
+        }
+        catch (Exception e)
+        {
+            await MainLayout.HandleException(e);
+            await InsertRow(role);
+        }
+    }
+
+
+    void EditRow(RoleDto role)
+    {
+        _rolesGrid.EditRow(role);
+    }
+
+    void SaveRow(RoleDto role)
+    {
+        _rolesGrid.UpdateRow(role);
+        isCreate = false;
+    }
+
+    void CancelEdit(RoleDto role)
+    {
+        _rolesGrid.CancelEditRow(role);
+        if (role.Id == null)
+            count--;
+        isCreate = false;
+        _rolesGrid.Reload();
+    }
+
+    async Task DeleteRow(RoleDto role, RadzenDataGrid<RoleDto> radzenDataGrid)
+    {
+        bool? flag = false;
+        flag = await DialogService.Confirm($"{role.Name} isimli rolü silmek istediğinize emin misiniz?", "Rolü Sil", new ConfirmOptions() { OkButtonText = "Evet", CancelButtonText = "Hayır" });
+        if (flag == true)
+        {
+            try
+            {
+                await RolesScreenUseCases.DeleteRoleAsync(role.Id);
+                ShowNotification(new NotificationMessage { Severity = NotificationSeverity.Success, Summary = "Rolü Sil", Detail = $"{role.Name.ToString()} isimli rol başarılı bir şekilde silindi.", Duration = 4000 });
+                await radzenDataGrid.Reload();
+            }
+            catch (Exception e)
+            {
+                await MainLayout.HandleException(e);
+            }
+        }
+    }
+
+    async Task InsertRow()
+    {
+        if (isCreate == false)
+        {
+            await _rolesGrid.Reload();
+            await _rolesGrid.InsertRow(new RoleDto());
+            count++;
+        }
+        isCreate = true;
+    }
+
+    async Task InsertRow(RoleDto role)
+    {
+        if (isCreate == false)
+        {
+            await _rolesGrid.Reload();
+            await _rolesGrid.InsertRow(role);
+            count++;
+        }
+        isCreate = true;
+    }
+
+    #endregion
+
+    async Task OpenRole(string roleName, string roleId, MainLayout mainLayout)
+    {
+        await DialogService.OpenAsync<DialogRoleComponent>($"{roleName} - İzinler",
+              new Dictionary<string, object>() { { "roleId", roleId }, {"MainLayout", mainLayout } },
+              new DialogOptions() { Width="1000px", Height="85%" });
+    }
+
+    void ShowNotification(NotificationMessage message)
+    {
+        NotificationService.Notify(message);
+    }
+
+}

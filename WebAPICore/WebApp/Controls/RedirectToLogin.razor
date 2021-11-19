@@ -1,0 +1,36 @@
+﻿@inject NavigationManager navigationManager
+@inject IConnectionTestScreenUseCases ConnectionTestScreenUseCases
+@inject IAuthenticationUseCases AuthenticationUseCases
+
+@code {
+    [CascadingParameter]
+    public Task<AuthenticationState> authenticationState { get; set; }
+    string userName;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var state = await authenticationState;
+        userName = state.User.Identity.Name;
+
+
+        if (string.IsNullOrWhiteSpace(userName))
+        {
+            navigationManager.NavigateTo("/login");
+        }
+        else
+        {
+            try
+            {
+                await ConnectionTestScreenUseCases.TestConnection();
+                navigationManager.NavigateTo("/", true);
+            }
+            catch (Exception)
+            {
+                await AuthenticationUseCases.Logout();
+                navigationManager.NavigateTo("/login/Expired", true);
+            }
+
+        }
+
+    }
+}

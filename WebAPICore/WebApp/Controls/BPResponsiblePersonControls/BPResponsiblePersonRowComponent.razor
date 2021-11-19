@@ -1,0 +1,252 @@
+﻿@inject IBusinessPartnersScreenUseCases BusinessPartnersScreenUseCases
+@inject IBPResponsiblePeopleScreenUseCases BPResponsiblePeopleScreenUseCases
+@inject NotificationService NotificationService
+@inject DialogService DialogService
+
+@using System.Text.Json;
+@using Core.AutoMapperDtos;
+@using Core.Pagination;
+
+<RadzenButton Icon="add_circle_outline" style="margin-bottom: 10px" Text="Ekle" Click="@InsertRow" />
+
+<RadzenDataGrid @ref="_responsiblePeopleGrid" AllowFiltering="true" FilterMode="FilterMode.Simple" AllowPaging="true" PageSizeOptions="@pageSizeOptions" AllowSorting="true" EditMode="DataGridEditMode.Single"
+                Data="@_responsiblePeople" IsLoading="@isLoading" LoadData="@LoadData" Count="@count" TItem="BPResponsiblePersonDto" RowUpdate="@OnUpdateRow" RowCreate="@OnCreateRow" ColumnWidth="200px">
+    <Columns>
+
+        <RadzenDataGridColumn CssClass="ui-cell-menu" Width="70px" TItem="BPResponsiblePersonDto" Property="Id" Title="Emails" Filterable="false" Sortable="false" TextAlign="TextAlign.Center">
+            <Template Context="responsiblePerson">
+                @{
+                    if (responsiblePerson.Id != 0)
+                    {
+                        <RadzenButton ButtonStyle="ButtonStyle.Secondary" Icon="email" Click=@(() => OpenResponsiblePersonEmails(responsiblePerson.Name, responsiblePerson.Id, this.MainLayout)) Text="" />
+                    }
+                }
+            </Template>
+        </RadzenDataGridColumn>
+
+        <RadzenDataGridColumn CssClass="ui-cell-menu" Width="70px" TItem="BPResponsiblePersonDto" Property="Id" Title="Gsm" Filterable="false" Sortable="false" TextAlign="TextAlign.Center">
+            <Template Context="responsiblePerson">
+                @{
+                    if (responsiblePerson.Id != 0)
+                    {
+                        <RadzenButton ButtonStyle="ButtonStyle.Secondary" Icon="phone" Click=@(() => OpenResponsiblePersonPhoneNumbers(responsiblePerson.Name, responsiblePerson.Id, this.MainLayout)) Text="" />
+                    }
+                }
+            </Template>
+        </RadzenDataGridColumn>
+
+
+        <RadzenDataGridColumn TItem="BPResponsiblePersonDto" Property="Name" Title="İsim">
+            <EditTemplate Context="responsiblePerson">
+
+                <RadzenTextBox @bind-Value="responsiblePerson.Name" Style="width:100%; display: block" Name="Name" />
+                @{
+                    if (count == 1)
+                    {
+                        <RadzenRequiredValidator Text="İsim zorunludur." Component="Name" Popup="false" />
+                    }
+
+                    else
+                    {
+                        <RadzenRequiredValidator Text="İsim zorunludur." Component="Name" Popup="true" />
+                    }
+                }
+            </EditTemplate>
+        </RadzenDataGridColumn>
+
+        <RadzenDataGridColumn TItem="BPResponsiblePersonDto" Property="Position" Title="Position">
+            <EditTemplate Context="responsiblePerson">
+                <RadzenTextBox @bind-Value="responsiblePerson.Position" Style="width:100%; display: block" Name="Position" />
+            </EditTemplate>
+        </RadzenDataGridColumn>
+
+
+        <RadzenDataGridColumn TItem="BPResponsiblePersonDto" Context="sampleBlazorModelsSampleOrder" Filterable="false" Sortable="false" TextAlign="TextAlign.Center" Width="70px">
+            <Template Context="responsiblePerson">
+                <RadzenButton Icon="edit" Size="ButtonSize.Small" Click="@(args => EditRow(responsiblePerson))" @onclick:stopPropagation="true">
+                </RadzenButton>
+            </Template>
+            <EditTemplate Context="responsiblePerson">
+                <RadzenButton Icon="save" Size="ButtonSize.Small" Click="@((args) => SaveRow(responsiblePerson))">
+                </RadzenButton>
+                <RadzenButton Icon="cancel" Size="ButtonSize.Small" ButtonStyle="ButtonStyle.Secondary" Click="@((args) => CancelEdit(responsiblePerson))">
+                </RadzenButton>
+            </EditTemplate>
+        </RadzenDataGridColumn>
+        <RadzenDataGridColumn TItem="BPResponsiblePersonDto" Context="responsiblePerson" Filterable="false" Sortable="false" TextAlign="TextAlign.Center" Width="70px">
+            <Template Context="responsiblePerson">
+                @{
+                    if (responsiblePerson.Id != 0)
+                    {
+                        <RadzenButton ButtonStyle="ButtonStyle.Danger" Icon="close" Size="ButtonSize.Small" @onclick:stopPropagation="true" Click=@(args => DeleteRow(responsiblePerson, _responsiblePeopleGrid)) />
+                    }
+                }
+            </Template>
+        </RadzenDataGridColumn>
+    </Columns>
+</RadzenDataGrid>
+
+@code {
+    [Parameter] public int CompanyId { get; set; }
+
+    RadzenDataGrid<BPResponsiblePersonDto> _responsiblePeopleGrid;
+    private IEnumerable<BPResponsiblePersonDto> _responsiblePeople { get; set; }
+    int count;
+    bool isLoading;
+    bool isCreate = false;
+    IEnumerable<int> pageSizeOptions = new int[] { 10, 25, 50, 100 };
+
+    [Parameter]
+    public MainLayout MainLayout { get; set; }
+    async Task HandleException(Exception e) => await MainLayout.HandleException(e);
+
+
+    #region DataGrid Region
+
+    async Task LoadData(LoadDataArgs args)
+    {
+        isLoading = true;
+        try
+        {
+            QueryParams qp = new QueryParams();
+            qp.Page = args.Skip.Value;
+            qp.PostsPerPage = args.Top.Value;
+            qp.Sort = args.OrderBy.ToString();
+            qp.Filter = args.Filter;
+
+            var response = await BusinessPartnersScreenUseCases.ViewBusinessPartnerResponsiblePeoplesAsync(CompanyId, qp);
+            count = response.Item1;
+            _responsiblePeople = response.Item2.ResponsiblePeople;
+            isLoading = false;
+        }
+        catch (Exception e)
+        {
+            await HandleException(e);
+        }
+    }
+
+    async Task OnUpdateRow(BPResponsiblePersonDto reponsiblePerson)
+    {
+        if (reponsiblePerson.Id == 0)
+        {
+            await OnCreateRow(reponsiblePerson);
+        }
+        else
+        {
+            try
+            {
+                await BPResponsiblePeopleScreenUseCases.UpdateResponsiblePeopleAsync(reponsiblePerson.Id, reponsiblePerson);
+                ShowNotification(new NotificationMessage { Severity = NotificationSeverity.Success, Summary = "Çalışan Güncelle", Detail = $"{reponsiblePerson.Name} isimli çalışan başarıyla güncellendi.", Duration = 4000 });
+            }
+            catch (Exception e)
+            {
+                await HandleException(e);
+                EditRow(reponsiblePerson);
+            }
+        }
+    }
+
+    async Task OnCreateRow(BPResponsiblePersonDto reponsiblePerson)
+    {
+        try
+        {
+            reponsiblePerson.BusinessPartnerId = CompanyId;
+            var response = await BPResponsiblePeopleScreenUseCases.CreateResponsiblePeopleAsync(reponsiblePerson);
+            ShowNotification(new NotificationMessage { Severity = NotificationSeverity.Success, Summary = "Çalışan Ekle", Detail = $"{response.Name} isimli çalışan başarıyla eklendi.", Duration = 4000 });
+            isCreate = false;
+            await _responsiblePeopleGrid.Reload();
+        }
+        catch (Exception e)
+        {
+            await HandleException(e);
+            await InsertRow(reponsiblePerson);
+        }
+    }
+
+
+    void EditRow(BPResponsiblePersonDto reponsiblePerson)
+    {
+        _responsiblePeopleGrid.EditRow(reponsiblePerson);
+    }
+
+    void SaveRow(BPResponsiblePersonDto reponsiblePerson)
+    {
+        _responsiblePeopleGrid.UpdateRow(reponsiblePerson);
+        isCreate = false;
+    }
+
+    void CancelEdit(BPResponsiblePersonDto reponsiblePerson)
+    {
+        _responsiblePeopleGrid.CancelEditRow(reponsiblePerson);
+        if (reponsiblePerson.Id == 0)
+            count--;
+        isCreate = false;
+        _responsiblePeopleGrid.Reload();
+    }
+
+    async Task DeleteRow(BPResponsiblePersonDto reponsiblePerson, RadzenDataGrid<BPResponsiblePersonDto> radzenDataGrid)
+    {
+        bool? flag = false;
+        flag = await DialogService.Confirm($"{reponsiblePerson.Name} isimli çalışanı silmek istediğinize emin misiniz?", "Çalışanı Sil", new ConfirmOptions() { OkButtonText = "Evet", CancelButtonText = "Hayır" });
+        if (flag == true)
+        {
+            try
+            {
+                await BPResponsiblePeopleScreenUseCases.DeleteResponsiblePeopleAsync(reponsiblePerson.Id);
+                ShowNotification(new NotificationMessage { Severity = NotificationSeverity.Success, Summary = "Çalışanı Sil", Detail = $"{reponsiblePerson.Name} isimli çalışan başarıyla silindi.", Duration = 4000 });
+                await radzenDataGrid.Reload();
+            }
+            catch (Exception e)
+            {
+                await HandleException(e);
+            }
+        }
+    }
+
+    async Task InsertRow()
+    {
+        if (isCreate == false)
+        {
+            await _responsiblePeopleGrid.Reload();
+            await _responsiblePeopleGrid.InsertRow(new BPResponsiblePersonDto());
+            count++;
+        }
+        isCreate = true;
+    }
+
+    async Task InsertRow(BPResponsiblePersonDto reponsiblePerson)
+    {
+        if (isCreate == false)
+        {
+            await _responsiblePeopleGrid.Reload();
+            await _responsiblePeopleGrid.InsertRow(reponsiblePerson);
+            count++;
+        }
+        isCreate = true;
+    }
+
+    #endregion
+
+    #region Dialog Services
+
+    async Task OpenResponsiblePersonEmails(string responsiblePersonName, int responsiblePersonId, MainLayout MainLayout)
+    {
+        await DialogService.OpenAsync<DialogBPRPEmailComponent>($"{responsiblePersonName} - Emailler",
+              new Dictionary<string, object>() { { "ResponsiblePersonId", responsiblePersonId }, { "MainLayout", MainLayout } },
+              new DialogOptions() { Width = "800px" });
+    }
+
+    async Task OpenResponsiblePersonPhoneNumbers(string responsiblePersonName, int responsiblePersonId, MainLayout mainLayout)
+    {
+        await DialogService.OpenAsync<DialogBPRPGsmComponent>($"{responsiblePersonName} - Telefon Numaraları",
+              new Dictionary<string, object>() { { "ResponsiblePersonId", responsiblePersonId }, { "MainLayout", mainLayout } },
+              new DialogOptions() { Width="800px" });
+    }
+    #endregion
+
+    void ShowNotification(NotificationMessage message)
+    {
+        NotificationService.Notify(message);
+    }
+
+}

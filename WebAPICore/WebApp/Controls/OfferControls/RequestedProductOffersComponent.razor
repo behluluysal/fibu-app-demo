@@ -1,0 +1,329 @@
+﻿@inject ISupplierCompaniesScreenUseCases SupplierCompaniesScreenUseCases
+@inject IOfferScreenUseCases OfferScreenUseCases
+@inject IRequestedProductsScreenUseCases RequestedProductsScreenUseCases
+@inject IPaymentsScreenUseCases PaymentsScreenUseCases
+@inject NotificationService NotificationService
+@inject DialogService DialogService
+
+@using System.Text.Json;
+@using Core.AutoMapperDtos;
+@using Core.Pagination;
+
+
+@{ 
+    if(ApprovedOffer != null)
+    {
+        <p class="alert alert-success">@ApprovedOffer.SupplierCompany.Name firmasının @ApprovedOffer.Amount tutarlı teklifi onaylanmıştır.</p>
+    }
+}
+
+<AuthorizeView Roles="@Permission.Offers.Create">
+    <Authorized>
+        <RadzenButton Icon="add_circle_outline" style="margin-bottom: 10px" Text="Add" Click="@InsertRow" />
+    </Authorized>
+</AuthorizeView>
+
+
+<RadzenDataGrid @ref="_offersGrid" AllowFiltering="true" FilterMode="FilterMode.Simple" AllowPaging="true" PageSizeOptions="@pageSizeOptions" AllowSorting="true" EditMode="DataGridEditMode.Single"
+                Data="@_offers" IsLoading="@isLoading" LoadData="@LoadData" Count="@count" TItem="OfferWithSupplierCompanyDto" RowUpdate="@OnUpdateRow" RowCreate="@OnCreateRow">
+    <Columns>
+
+        <RadzenDataGridColumn TItem="OfferWithSupplierCompanyDto" Property="SupplierCompanyId" Title="Company" FilterValue="@companyFilterValue">
+            <FilterTemplate>
+                <RadzenDropDown AllowFiltering="true" @bind-Value="@companyFilterValue" TextProperty="Name" ValueProperty="Id" Data="@_companiesDropdown" Change=@CompanyFilterChange />
+            </FilterTemplate>
+            <EditTemplate Context="offer">
+                <RadzenDropDown AllowFiltering="true" @bind-Value="offer.SupplierCompanyId" Data="@_companies" TextProperty="Name" ValueProperty="Id" Style="width:100%" />
+            </EditTemplate>
+            <Template Context="offer">
+                @offer.SupplierCompany.Name
+            </Template>
+        </RadzenDataGridColumn>
+
+        <RadzenDataGridColumn TItem="OfferWithSupplierCompanyDto" Property="Amount" Title="Price">
+            <EditTemplate Context="offer">
+                <RadzenNumeric @bind-Value="offer.Amount" Style="width:100%; display: block" Name="Amount" />
+            </EditTemplate>
+        </RadzenDataGridColumn>
+
+        @{
+            if (RequestedProductDto != null)
+            {
+                if (RequestedProductDto.Status == RequestedProduct.StatusValues.Approved)
+                {
+                    <RadzenDataGridColumn TItem="OfferWithSupplierCompanyDto" Property="Id" Title="Teklifi Onayla">
+                        <Template Context="offer">
+                            @if (offer.Id != 0)
+                            {
+                                <RadzenButton Style="height: auto; padding: 0px 5px; margin-left: 8px;" Size="ButtonSize.Small" Click="@((args) => PreConfirmRequestedProduct(offer, _offersGrid))">
+                                    <RadzenIcon Icon="check_circle" Style="font-size: 20px;" />
+                                </RadzenButton>
+                            }
+                        </Template>
+                    </RadzenDataGridColumn>
+                }
+            }
+        }
+
+        <AuthorizeView Roles="@Permission.Offers.Edit">
+            <Authorized>
+                <RadzenDataGridColumn TItem="OfferWithSupplierCompanyDto" Context="sampleBlazorModelsSampleOrder" Filterable="false" Sortable="false" TextAlign="TextAlign.Center" Width="70px">
+                    <Template Context="offer">
+                        <RadzenButton Icon="edit" Size="ButtonSize.Small" Click="@(args => EditRow(offer))" @onclick:stopPropagation="true">
+                        </RadzenButton>
+                    </Template>
+                    <EditTemplate Context="offer">
+                        <RadzenButton Icon="save" Size="ButtonSize.Small" Click="@((args) => SaveRow(offer))">
+                        </RadzenButton>
+                        <RadzenButton Icon="cancel" Size="ButtonSize.Small" ButtonStyle="ButtonStyle.Secondary" Click="@((args) => CancelEdit(offer))">
+                        </RadzenButton>
+                    </EditTemplate>
+                </RadzenDataGridColumn>
+            </Authorized>
+        </AuthorizeView>
+
+        <AuthorizeView Roles="@Permission.Offers.Delete">
+            <Authorized>
+                <RadzenDataGridColumn TItem="OfferWithSupplierCompanyDto" Context="offer" Filterable="false" Sortable="false" TextAlign="TextAlign.Center" Width="70px">
+                    <Template Context="offer">
+                        @{
+                            if (offer.Id != 0)
+                            {
+                                <RadzenButton ButtonStyle="ButtonStyle.Danger" Icon="close" Size="ButtonSize.Small" @onclick:stopPropagation="true" Click=@(args => DeleteRow(offer, _offersGrid)) />
+                            }
+                        }
+                    </Template>
+                </RadzenDataGridColumn>
+            </Authorized>
+        </AuthorizeView>
+    </Columns>
+</RadzenDataGrid>
+
+@code {
+    [Parameter] public int RequestedProductId { get; set; }
+    [Parameter] public MainLayout MainLayout { get; set; }
+    [Parameter] public RadzenDataGrid<RequestedProductDto> RequestedProductGrid { get; set; }
+    [Parameter] public RadzenDataGrid<RequestDto> RequestGrid { get; set; }
+    async Task HandleException(Exception e) => await MainLayout.HandleException(e);
+
+    private RequestedProductDto RequestedProductDto { get; set; }
+
+    RadzenDataGrid<OfferWithSupplierCompanyDto> _offersGrid;
+    private IEnumerable<OfferWithSupplierCompanyDto> _offers { get; set; }
+    int count;
+    bool isLoading;
+    bool isCreate = false;
+    IEnumerable<int> pageSizeOptions = new int[] { 10, 25, 50, 100 };
+
+    private IEnumerable<SupplierCompanyDto> _companies { get; set; }
+    private List<SupplierCompanyDto> _companiesDropdown { get; set; }
+    private int? companyFilterValue { get; set; }
+
+    private OfferWithSupplierCompanyDto ApprovedOffer { get; set; }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        RequestedProductDto = await RequestedProductsScreenUseCases.ViewRequestedProductByIdAsync(RequestedProductId);
+        var response = await SupplierCompaniesScreenUseCases.ViewSupplierCompaniesAsync(new QueryParams());
+        _companies = response.Item2;
+        _companiesDropdown = new List<SupplierCompanyDto>();
+        _companiesDropdown.Add(new SupplierCompanyDto { Id = -1, Name = "All" });
+        _companiesDropdown = _companiesDropdown.Concat(_companies).ToList();
+
+        ApprovedOffer = await OfferScreenUseCases.GetApprovedOffer(new QueryParams(), RequestedProductId);
+        StateHasChanged();
+    }
+
+    #region DataGrid Region
+
+    async Task LoadData(LoadDataArgs args)
+    {
+        isLoading = true;
+        try
+        {
+            QueryParams qp = new QueryParams();
+            qp.Page = args.Skip.Value;
+            qp.PostsPerPage = args.Top.Value;
+            qp.Sort = args.OrderBy.ToString();
+            qp.Filter = args.Filter;
+            qp.Filter = qp.Filter.Replace("(SupplierCompany == null ? null : SupplierCompany.Id) = -1", "(SupplierCompanyId != 0)");
+
+            var response = await OfferScreenUseCases.ViewOffersOfRequestedProductAsync(qp, RequestedProductId);
+            count = response.Item1;
+            _offers = response.Item2;
+            isLoading = false;
+            StateHasChanged();
+        }
+        catch (Exception e)
+        {
+            await MainLayout.HandleException(e);
+        }
+    }
+
+    async Task OnUpdateRow(OfferWithSupplierCompanyDto offer)
+    {
+        if (offer.Id == 0)
+        {
+            await OnCreateRow(offer);
+        }
+        else
+        {
+            try
+            {
+                await OfferScreenUseCases.UpdateOfferAsync(offer.Id, offer);
+                ShowNotification(new NotificationMessage { Severity = NotificationSeverity.Success, Summary = "Update", Detail = $"Offer with id {offer.Id} updated successfully.", Duration = 4000 });
+            }
+            catch (Exception e)
+            {
+                await MainLayout.HandleException(e);
+                EditRow(offer);
+            }
+        }
+        await _offersGrid.Reload();
+    }
+
+    async Task OnCreateRow(OfferWithSupplierCompanyDto offer)
+    {
+        OfferCreateDto offerCreate = new OfferCreateDto
+        {
+            RequestedProductId = RequestedProductId,
+            SupplierCompanyId = offer.SupplierCompanyId,
+            Amount = offer.Amount
+        };
+
+        try
+        {
+            var response = await OfferScreenUseCases.CreateOfferAsync(offerCreate);
+            ShowNotification(new NotificationMessage { Severity = NotificationSeverity.Success, Summary = "Insert", Detail = $"Offer with id {response.Id} inserted successfully.", Duration = 4000 });
+            isCreate = false;
+            await _offersGrid.Reload();
+        }
+        catch (Exception e)
+        {
+            await MainLayout.HandleException(e);
+            await InsertRow(offer);
+        }
+    }
+
+
+    void EditRow(OfferWithSupplierCompanyDto offer)
+    {
+        _offersGrid.EditRow(offer);
+    }
+
+    void SaveRow(OfferWithSupplierCompanyDto offer)
+    {
+        _offersGrid.UpdateRow(offer);
+        isCreate = false;
+    }
+
+    void CancelEdit(OfferWithSupplierCompanyDto offer)
+    {
+        _offersGrid.CancelEditRow(offer);
+        if (offer.Id == 0)
+            count--;
+        isCreate = false;
+        _offersGrid.Reload();
+    }
+
+    async Task DeleteRow(OfferWithSupplierCompanyDto offer, RadzenDataGrid<OfferWithSupplierCompanyDto> radzenDataGrid)
+    {
+        bool? flag = false;
+        flag = await DialogService.Confirm($"Are you sure to delete {offer.SupplierCompany.Name}'s Offer?", "Delete Offer", new ConfirmOptions() { OkButtonText = "Yes", CancelButtonText = "No" });
+        if (flag == true)
+        {
+            try
+            {
+                await OfferScreenUseCases.DeleteOfferAsync(offer.Id);
+                ShowNotification(new NotificationMessage { Severity = NotificationSeverity.Success, Summary = "Deletion", Detail = $"Offer with id {offer.Id.ToString()} deleted successfully", Duration = 4000 });
+                await radzenDataGrid.Reload();
+            }
+            catch (Exception e)
+            {
+                await MainLayout.HandleException(e);
+            }
+        }
+    }
+
+    async Task InsertRow()
+    {
+        if (isCreate == false)
+        {
+            await _offersGrid.Reload();
+            OfferWithSupplierCompanyDto temp = new OfferWithSupplierCompanyDto();
+            temp.SupplierCompany = new SupplierCompanyWithoutContactDto();
+            await _offersGrid.InsertRow(temp);
+            count++;
+        }
+        isCreate = true;
+    }
+
+    async Task InsertRow(OfferWithSupplierCompanyDto offer)
+    {
+        if (isCreate == false)
+        {
+            await _offersGrid.Reload();
+            await _offersGrid.InsertRow(offer);
+            count++;
+        }
+        isCreate = true;
+    }
+
+    #endregion
+
+    #region Dialog Services
+
+    async Task CompanyFilterChange()
+    {
+        await _offersGrid.Reload();
+    }
+    #endregion
+
+    void ShowNotification(NotificationMessage message)
+    {
+        NotificationService.Notify(message);
+    }
+
+
+    #region Requested Product Enum Operations
+
+    private async Task PreConfirmRequestedProduct(OfferWithSupplierCompanyDto offer, RadzenDataGrid<OfferWithSupplierCompanyDto> radzenDataGrid)
+    {
+        bool? flag = false;
+        flag = await DialogService.Confirm($"{offer.Id} id'li teklifi onaylamak istiyor musunuz? (Bu işlem geri alınamaz)", "Teklifi Onayla", new ConfirmOptions() { OkButtonText = "Evet", CancelButtonText = "Hayır" });
+        if (flag == true)
+        {
+            try
+            {
+                offer.RequestedProduct.Status = RequestedProduct.StatusValues.Confirmed;
+                await RequestedProductsScreenUseCases.UpdateRequestedProductAsync(offer.RequestedProduct.Id, offer.RequestedProduct);
+
+                PaymentDto payment = new PaymentDto
+                {
+                    Price = offer.Amount,
+                    Method = "cash",
+                    OfferId = offer.Id,
+                    Date = DateTime.Now
+                };
+                await PaymentsScreenUseCases.CreatePaymentAsync(payment);
+
+                offer.isConfirmedOffer = true;
+                await OfferScreenUseCases.UpdateOfferAsync(offer.Id, offer);
+
+                ShowNotification(new NotificationMessage { Severity = NotificationSeverity.Success, Summary = "Teklif Onayı", Detail = $"Teklif başarılı bir şekilde onaylandı.", Duration = 4000 });
+
+                StateHasChanged();
+                await radzenDataGrid.Reload();
+                await RequestedProductGrid.Reload();
+                await RequestGrid.Reload();
+            }
+            catch (Exception e)
+            {
+                offer.RequestedProduct.Status = RequestedProduct.StatusValues.Approved;
+                await HandleException(e);
+            }
+        }
+    }
+
+    #endregion
+}

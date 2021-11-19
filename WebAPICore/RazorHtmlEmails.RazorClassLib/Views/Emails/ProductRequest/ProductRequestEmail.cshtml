@@ -1,0 +1,48 @@
+﻿@using RazorHtmlEmails.RazorClassLib.Views.Emails.ProductRequestEmail
+@using RazorHtmlEmails.RazorClassLib.Views.Shared
+@model ProductRequestViewModel
+
+@{
+    ViewData["EmailTitle"] = "Product Request";
+    int i = 1;
+}
+
+
+<table class="table">
+    <thead>
+        <tr>
+            <th scope="col">#</th>
+            <th scope="col">Product</th>
+            <th scope="col">Quantity</th>
+            <th scope="col">Deadline</th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var item in Model.RequestedProducts)
+        {
+            <tr>
+                <th scope="row">@{i++;}</th>
+                <td>@item.Product.Name</td>
+                <td>@item.Quantity</td>
+                <td>@item.Deadline</td>
+            </tr>
+        }
+    </tbody>
+</table>    
+
+
+<br />
+
+@await Html.PartialAsync("EmailButton", new EmailButtonViewModel("Contact and Offer Now!", Model.RequestPageUrl))
+
+<br />
+
+<p>
+    If you have any questions, just reply to this email—we're always happy to help out.
+</p>
+
+<br />
+
+<p>
+    FIBU Team
+</p>

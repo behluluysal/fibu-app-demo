@@ -1,0 +1,36 @@
+﻿<Project Sdk="Microsoft.NET.Sdk.BlazorWebAssembly">
+
+  <PropertyGroup>
+    <TargetFramework>net5.0</TargetFramework>
+	  <PreserveCompilationContext>false</PreserveCompilationContext>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Remove="Pages\Chats\AdminChatIndex.razor.css" />
+    <None Remove="Pages\Chats\ChatIndex - Copy.razor.css" />
+    <None Remove="Pages\Chats\ChatIndex.razor.css" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="Pages\Chats\ChatIndex.razor.css" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly" Version="5.0.10" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.Authentication" Version="5.0.10" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.DevServer" Version="5.0.10" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.AspNetCore.Razor.Runtime" Version="2.2.0" />
+    <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" Version="5.0.10" />
+    <PackageReference Include="Radzen.Blazor" Version="3.9.8" />
+    <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="6.12.2" />
+    <PackageReference Include="System.Linq.Dynamic.Core" Version="1.2.12" />
+    <PackageReference Include="System.Net.Http.Json" Version="5.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\App.Repository\App.Repository.csproj" />
+    <ProjectReference Include="..\Core\Core.csproj" />
+    <ProjectReference Include="..\UseCases\UseCases.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,33 @@
+﻿@page "/my-requested-products"
+@attribute [Authorize(Roles = Permission.RequestedProducts.MyView)]
+
+<h3 class="alert alert-link pl-0">REQUESTED PRODUCTS</h3>
+
+<div>
+    <div class="row">
+        <div class="col col-md-12">
+            @if (PartnerId != -1)
+            {
+                <RequestedProductRowComponent PartnerId="PartnerId"> </RequestedProductRowComponent>
+            }
+        </div>
+    </div>
+</div>
+
+
+
+@code {
+    [CascadingParameter]
+    public Task<AuthenticationState> authenticationState { get; set; }
+
+    int PartnerId = -1;
+
+    //mustang bu kontrole gerek olmayacak çünkü sayfaya authorize eklenince böyle bir senaryo yaşanamaz biLe
+    protected override async Task OnInitializedAsync()
+    {
+        var state = await authenticationState;
+        var x = state.User.Claims.FirstOrDefault(x => x.Type == "PartnerId")?.Value;
+        if (x != null)
+            PartnerId = int.Parse(x);
+    }
+}

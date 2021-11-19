@@ -1,0 +1,266 @@
+﻿@page "/company-chat/{scid}"
+@layout EmptyLayout
+@inject IAuthenticationUseCases AuthenticationUseCases
+@inject IChatsScreenUseCases ChatsScreenUseCases
+@inject IOfferScreenUseCases OfferScreenUseCases
+@inject DialogService DialogService
+@inject NotificationService NotificationService
+
+<link href="https://maxcdn.bootstrapcdn.com/font-awesome/4.7.0/css/font-awesome.min.css" rel="stylesheet" />
+
+@if (loading)
+{
+    <p>LOADING...</p>
+}
+else
+{
+    @if (validAddress)
+    {
+
+        <div class="row my-3 mx-4">
+            <div class="col-12 mb-3">
+                <RadzenCard Style="background-color: #e1f7f4; border-color: #e1f7f4; ">
+                    <h3>Welcome, <b>@chatDto.SupplierCompany.Name</b></h3>
+                </RadzenCard>
+            </div>
+            <div class="col-6">
+                <RadzenCard Style="height:75%;">
+                    <div class="py-2 px-4 border-bottom d-none d-lg-block">
+                        <div class="d-flex align-items-center py-1">
+                            <div class="position-relative">
+                                <img src="https://google.com" class="rounded-circle mr-1" alt="Sharon Lessman" width="40" height="40">
+                            </div>
+                            <div class="flex-grow-1 pl-3">
+                                <strong>FIBU Manager</strong>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="chat-messages p-4">
+                        @foreach (var msg in Messages)
+                        {
+                            if (!msg.AdminMessage)
+                            {
+                                <div class="chat-message-right pb-4">
+                                    <div>
+                                        <img src="https://google.com" class="rounded-circle mr-1" alt="Chris Wood" width="40" height="40">
+                                        <div class="text-muted small text-nowrap mt-2">@msg.SentTime.ToShortDateString()</div>
+                                    </div>
+                                    <div class="flex-shrink-1 bg-light rounded py-2 px-3 mr-3">
+                                        @msg.MessageText
+                                    </div>
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="chat-message-left pb-4">
+                                    <div>
+                                        <img src="https://google.com" class="rounded-circle mr-1" alt="Sharon Lessman" width="40" height="40">
+                                        <div class="text-muted small text-nowrap mt-2">@msg.SentTime.ToShortDateString()</div>
+                                    </div>
+                                    <div class="flex-shrink-1 bg-light rounded py-2 px-3 ml-3">
+                                        @msg.MessageText
+                                    </div>
+                                </div>
+                            }
+                        }
+                    </div>
+
+
+                    <div class="flex-grow-0 py-3 px-4 border-top">
+                        <div class="input-group">
+                            <input type="text" @bind="MessageInput" @bind:event="oninput" @onkeydown="@KeyPress" class="form-control" placeholder="Type your message">
+                            <button @onclick="@Send" class="btn btn-primary">Send</button>
+                        </div>
+                    </div>
+                </RadzenCard>
+            </div>
+            <div class="col-6">
+                <RadzenCard Style="height:75%;">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Ürün Resmi</th>
+                                <th>Ürün İsmi</th>
+                                <th>Adet</th>
+                                <th>Son Tarih</th>
+                                <th>Durum</th>
+                                <th>Teklif Ver</th>
+                            </tr>
+                        </thead>
+
+                        <tbody>
+                            @{
+                                int i = 1;
+
+                                foreach (var item in RequestedProductWithTagsDto)
+                                {
+                                    <tr>
+                                        <td>@(i++)</td>
+                                        <td>
+                                            @{
+                                                if (!String.IsNullOrEmpty(item.Product.Image) && item.Product.Image.Length < 100)
+                                                {
+                                                    string url = "https://localhost:5001/images/";
+                                                    url += item.Product.Image;
+                                                    <RadzenImage Path="@url" style="width: 70px; height: 70px; border-radius: 8px; " />
+                                                }
+                                            }
+                                        </td>
+                                        <td>@item.Product.Name</td>
+                                        <td>@item.Quantity</td>
+                                        <td>@item.Deadline</td>
+                                        <td>@item.Status</td>
+                                        <td><RadzenButton ButtonStyle="ButtonStyle.Secondary" Click=@(() => GiveOffer(item.Product.Name, item.Id)) Icon="money" Text="" /></td>
+                                    </tr>
+                                }
+                            }
+
+                        </tbody>
+                    </table>
+                </RadzenCard>
+            </div>
+        </div>
+
+    }
+    else
+    {
+        <_404 />
+    }
+}
+
+
+
+@code {
+    [Parameter]
+    public string scid { get; set; }
+
+    public ChatDto chatDto { get; set; }
+
+    private bool validAddress { get; set; }
+    private bool loading { get; set; }
+
+    private HubConnection hubConnection;
+    public List<MessageDto> Messages { get; set; } = new List<MessageDto>();
+    public string MessageInput { get; set; }
+
+    public List<RequestedProductWithTagsDto> RequestedProductWithTagsDto { get; set; } = new List<RequestedProductWithTagsDto>();
+
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            // Initial value is False
+            loading = true;
+            validAddress = false;
+
+            try
+            {
+                // Check Tokens if they are valid
+                await AuthenticationUseCases.LoginAsync(new UserLoginViewModel { Email = "demo@gmail.com", Password = "demo" });
+                chatDto = await ChatsScreenUseCases.ViewChatByIdAsync(scid);
+
+                if (chatDto != null && chatDto.Request.Status != Request.StatusValues.Completed)
+                {
+                    validAddress = true;
+                    Messages = chatDto.Messages.ToList();
+                    RequestedProductWithTagsDto = chatDto.Request.RequestedProducts.Where(x => (chatDto.SupplierCompany.Tags.Select(y => y.Id).ToList().Intersect(x.Product.Tags.Select(y => y.Id).ToList()).ToList().Count > 0)).ToList();
+                }
+            }
+            catch (Exception)
+            {
+
+            }
+
+            loading = false;
+            StateHasChanged();
+
+            hubConnection = new HubConnectionBuilder()
+        .WithUrl("https://localhost:5001/chathub")
+        .Build();
+
+            hubConnection.On<Message>("ReceiveMessage", (message) =>
+            {
+                if (message.Chat.SupplierCompanyId == chatDto.SupplierCompanyId &&
+                    message.Chat.RequestId == chatDto.RequestId)
+                {
+                    Messages.Add(new MessageDto
+                    {
+                        AdminMessage = message.AdminMessage,
+                        MessageText = message.MessageText,
+                        SentTime = message.SentTime
+                    });
+                    StateHasChanged();
+                }
+            });
+
+            await hubConnection.StartAsync();
+        }
+        catch (Exception e)
+        {
+            Console.WriteLine(e.Message);
+
+        }
+
+    }
+
+
+    public async Task Send()
+    {
+        Message message = new Message()
+        {
+            AdminMessage = false,
+            ChatId = scid,
+            Chat = new Chat { SupplierCompanyId = chatDto.SupplierCompanyId, Id = scid, RequestId = chatDto.RequestId },
+            MessageText = MessageInput,
+            SentTime = DateTime.Now
+        };
+
+        await hubConnection.SendAsync("SendMessage", message);
+        MessageInput = "";
+    }
+
+    public async Task KeyPress(KeyboardEventArgs e)
+    {
+        if (e.Code == "Enter" || e.Code == "NumpadEnter")
+        {
+            await Send();
+        }
+    }
+
+    public async Task GiveOffer(string productName, int requestedProductId)
+    {
+        Console.WriteLine("Give Offer Func");
+        await DialogService.OpenAsync<CompanyGiveOfferComponent>($"Teklif Ver - {productName}",
+            new Dictionary<string, object>() { { "RequestedProductId", requestedProductId } ,{ "SupplierCompanyId", chatDto.SupplierCompanyId }, { "scid", scid } },
+            new DialogOptions() { }
+            );
+        Console.WriteLine("asdsa");
+    }
+
+    public async Task SaveOffer(int requestedProductId, double amount)
+    {
+        OfferCreateDto offerCreate = new OfferCreateDto
+        {
+            RequestedProductId = requestedProductId,
+            SupplierCompanyId = chatDto.SupplierCompanyId,
+            Amount = amount
+        };
+        try
+        {
+            var response = await OfferScreenUseCases.CreateOfferAsync(offerCreate);
+            ShowNotification(new NotificationMessage { Severity = NotificationSeverity.Success, Summary = "Insert", Detail = "Teklif başarıyla oluşturuldu.", Duration = 4000 });
+        }
+        catch (Exception e)
+        {
+            ShowNotification(new NotificationMessage { Severity = NotificationSeverity.Error, Summary = "Insert", Detail = e.Message, Duration = 4000 });
+        }
+    }
+
+    void ShowNotification(NotificationMessage message)
+    {
+        NotificationService.Notify(message);
+    }
+}

@@ -1,0 +1,18 @@
+﻿@page "/business-partners"
+@attribute [Authorize(Roles = Permission.BusinessPartners.View)]
+
+<h3 class="alert alert-link pl-0">İŞ ORTAKLARI</h3>
+
+<div>
+    <div class="row">
+        <div class="col col-md-12">
+            <PartnerRowComponent> </PartnerRowComponent>
+        </div>
+    </div>
+</div>
+
+
+
+@code {
+
+}

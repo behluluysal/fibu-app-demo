@@ -1,0 +1,312 @@
+﻿@using System.Text.Json;
+@using Core.Pagination;
+@using Core.AutoMapperDtos;
+
+@inject ISupplierCompaniesScreenUseCases SupplierCompaniesScreenUseCases
+@inject NotificationService NotificationService
+@inject DialogService DialogService
+
+<AuthorizeView Roles="@Permission.SupplierCompanies.Create">
+    <Authorized>
+        <RadzenButton Icon="add_circle_outline" style="margin-bottom: 10px" Text="Ekle" Click="@InsertRow" />
+    </Authorized>
+</AuthorizeView>
+
+
+<RadzenDataGrid @ref="_companiesGrid" AllowFiltering="true" FilterMode="FilterMode.Simple" AllowPaging="true" PageSizeOptions="@pageSizeOptions" AllowSorting="true" EditMode="DataGridEditMode.Single"
+                Data="@_companies" IsLoading="@isLoading" LoadData="@LoadData" Count="@count" TItem="SupplierCompanyDto" RowUpdate="@OnUpdateRow" RowCreate="@OnCreateRow" ColumnWidth="200px">
+    <Columns>
+
+        <AuthorizeView Roles="@(String.Join(",",Permission.SupplierCompanies.EditTag,Permission.SCResponsiblePeople.View,Permission.Offers.View))" Context="baseAuth">
+            <Authorized Context="baseAuth">
+                <RadzenDataGridColumn Width="50px" TItem="SupplierCompanyDto" Property="Id" Title="Detaylar" Filterable="false" Sortable="false" TextAlign="TextAlign.Center">
+                    <Template Context="company">
+                        @{
+                            if (company.Id != 0)
+                            {
+                                <RadzenMenu Click="menuClick">
+                                    <RadzenMenuItem Icon="list">
+                                        <AuthorizeView Roles="@Permission.SupplierCompanies.EditTag">
+                                            <Authorized>
+                                                <RadzenMenuItem Text="Firma Etiketleri" Value="company.Id" Icon="description"></RadzenMenuItem>
+                                            </Authorized>
+                                        </AuthorizeView>
+                                        <AuthorizeView Roles="@Permission.SCResponsiblePeople.View">
+                                            <Authorized>
+                                                <RadzenMenuItem Text="Firma Çalışanları" Value="company.Id" Icon="check_circle"></RadzenMenuItem>
+                                            </Authorized>
+                                        </AuthorizeView>
+                                    </RadzenMenuItem>
+                                </RadzenMenu>
+                            }
+                        }
+                    </Template>
+                </RadzenDataGridColumn>
+            </Authorized>
+        </AuthorizeView>
+
+        <RadzenDataGridColumn TItem="SupplierCompanyDto" Property="Name" Title="Firma Adı">
+            <EditTemplate Context="company">
+
+                <RadzenTextBox @bind-Value="company.Name" Style="width:100%; display: block" Name="Name" />
+                @{
+                    if (count == 1)
+                    {
+                        <RadzenRequiredValidator Text="Firma adı zorunludur" Component="Name" Popup="false" />
+                    }
+
+                    else
+                    {
+                        <RadzenRequiredValidator Text="Firma adı zorunludur" Component="Name" Popup="true" />
+                    }
+                }
+            </EditTemplate>
+        </RadzenDataGridColumn>
+
+        <RadzenDataGridColumn TItem="SupplierCompanyDto" Property="Adress" Title="Adres">
+            <EditTemplate Context="company">
+                <RadzenTextBox @bind-Value="company.Adress" Style="width:100%; display: block" Name="Adress" />
+            </EditTemplate>
+        </RadzenDataGridColumn>
+
+        <RadzenDataGridColumn TItem="SupplierCompanyDto" Property="Email" Title="Email">
+            <EditTemplate Context="company">
+                <RadzenTextBox @bind-Value="company.Email" Style="width:100%; display: block" Name="Email" />
+                @{
+                    if (count == 1)
+                    {
+                        <RadzenRequiredValidator Text="Firma email'i zorunludur" Component="Email" Popup="false" />
+                    }
+
+                    else
+                    {
+                        <RadzenRequiredValidator Text="Firma email'i zorunludur" Component="Email" Popup="true" />
+                    }
+                }
+            </EditTemplate>
+        </RadzenDataGridColumn>
+
+        <AuthorizeView Roles="@Permission.SupplierCompanies.Edit">
+            <Authorized>
+                <RadzenDataGridColumn TItem="SupplierCompanyDto" Context="sampleBlazorModelsSampleOrder" Filterable="false" Sortable="false" TextAlign="TextAlign.Center" Width="70px">
+                    <Template Context="company">
+                        <RadzenButton Icon="edit" Size="ButtonSize.Small" Click="@(args => EditRow(company))" @onclick:stopPropagation="true">
+                        </RadzenButton>
+                    </Template>
+                    <EditTemplate Context="company">
+                        <RadzenButton Icon="save" Size="ButtonSize.Small" Click="@((args) => SaveRow(company))">
+                        </RadzenButton>
+                        <RadzenButton Icon="cancel" Size="ButtonSize.Small" ButtonStyle="ButtonStyle.Secondary" Click="@((args) => CancelEdit(company))">
+                        </RadzenButton>
+                    </EditTemplate>
+                </RadzenDataGridColumn>
+            </Authorized>
+        </AuthorizeView>
+
+        <AuthorizeView Roles="@Permission.SupplierCompanies.Delete">
+            <Authorized>
+                <RadzenDataGridColumn TItem="SupplierCompanyDto" Context="company" Filterable="false" Sortable="false" TextAlign="TextAlign.Center" Width="70px">
+                    <Template Context="company">
+                        @{
+                            if (company.Id != 0)
+                            {
+                                <RadzenButton ButtonStyle="ButtonStyle.Danger" Icon="close" Size="ButtonSize.Small" @onclick:stopPropagation="true" Click=@(args => DeleteRow(company, _companiesGrid)) />
+                            }
+                        }
+                    </Template>
+                </RadzenDataGridColumn>
+            </Authorized>
+        </AuthorizeView>
+
+    </Columns>
+</RadzenDataGrid>
+
+@code {
+    RadzenDataGrid<SupplierCompanyDto> _companiesGrid;
+    private IEnumerable<SupplierCompanyDto> _companies { get; set; }
+    int count;
+    bool isLoading;
+    bool isCreate = false;
+    IEnumerable<int> pageSizeOptions = new int[] { 10, 25, 50, 100 };
+
+
+    [CascadingParameter(Name = "MainLayout")]
+    public MainLayout MainLayout { get; set; }
+    async Task HandleException(Exception e) => await MainLayout.HandleException(e);
+
+
+    #region DataGrid Region
+
+    async Task menuClick(MenuItemEventArgs e)
+    {
+        switch (e.Text)
+        {
+            case "Firma Etiketleri":
+                await OpenTags(int.Parse(e.Value.ToString()), MainLayout);
+                break;
+            case "Firma Çalışanları":
+                await OpenResponsiblePeople(int.Parse(e.Value.ToString()), MainLayout);
+                break;
+            case "Firma Teklifleri":
+                await OpenOffers(int.Parse(e.Value.ToString()),MainLayout);
+                break;
+            default:
+                break;
+        }
+    }
+
+    async Task LoadData(LoadDataArgs args)
+    {
+        isLoading = true;
+        try
+        {
+            QueryParams qp = new QueryParams();
+            qp.Page = args.Skip.Value;
+            qp.PostsPerPage = args.Top.Value;
+            qp.Sort = args.OrderBy.ToString();
+            qp.Filter = args.Filter;
+
+            var response = await SupplierCompaniesScreenUseCases.ViewSupplierCompaniesAsync(qp);
+            count = response.Item1;
+            Console.WriteLine(count);
+            _companies = response.Item2;
+            isLoading = false;
+        }
+        catch (Exception e)
+        {
+            await HandleException(e);
+        }
+    }
+
+    async Task OnUpdateRow(SupplierCompanyDto company)
+    {
+        if(company.Id == 0)
+        {
+            await OnCreateRow(company);
+        }
+        else
+        {
+            try
+            {
+                await SupplierCompaniesScreenUseCases.UpdateSupplierCompanyAsync(company.Id, company);
+                ShowNotification(new NotificationMessage { Severity = NotificationSeverity.Success, Summary = "Firma Güncelle", Detail = $"{company.Name} isimli firma başarıyla güncellendi.", Duration = 4000 });
+            }
+            catch (Exception e)
+            {
+                await HandleException(e);
+                EditRow(company);
+            }
+        }
+    }
+
+    async Task OnCreateRow(SupplierCompanyDto company)
+    {
+        try
+        {
+            var response = await SupplierCompaniesScreenUseCases.CreateSupplierCompanyAsync(company);
+            ShowNotification(new NotificationMessage { Severity = NotificationSeverity.Success, Summary = "Firma Ekle", Detail = $"{company.Name} isimli firma başarıyla eklendi.", Duration = 4000 });
+            isCreate = false;
+            await _companiesGrid.Reload();
+        }
+        catch (Exception e)
+        {
+            await HandleException(e);
+            await InsertRow(company);
+        }
+    }
+
+
+    void EditRow(SupplierCompanyDto company)
+    {
+        _companiesGrid.EditRow(company);
+    }
+
+    void SaveRow(SupplierCompanyDto company)
+    {
+        _companiesGrid.UpdateRow(company);
+        isCreate = false;
+    }
+
+    void CancelEdit(SupplierCompanyDto company)
+    {
+        _companiesGrid.CancelEditRow(company);
+        if (company.Id == 0)
+        {
+            count--;
+        }
+        isCreate = false;
+        _companiesGrid.Reload();
+    }
+
+    async Task DeleteRow(SupplierCompanyDto company, RadzenDataGrid<SupplierCompanyDto> radzenDataGrid)
+    {
+        bool? flag = false;
+        flag = await DialogService.Confirm($"{company.Name} isimli firmayı silmek istediğinize emin misiniz?", "Firmayı Sil", new ConfirmOptions() { OkButtonText = "Evet", CancelButtonText = "Hayır" });
+        if(flag == true)
+        {
+            try
+            {
+                await SupplierCompaniesScreenUseCases.DeleteSupplierCompanyAsync(company.Id);
+                ShowNotification(new NotificationMessage { Severity = NotificationSeverity.Success, Summary = "Firmayı Sil", Detail = $"{company.Name} isimli firma başarıyla silindi.", Duration = 4000 });
+                await radzenDataGrid.Reload();
+            }
+            catch (Exception e)
+            {
+                await MainLayout.HandleException(e);
+            }
+        }
+    }
+
+    async Task InsertRow()
+    {
+        if (isCreate == false)
+        {
+            await _companiesGrid.Reload();
+            await _companiesGrid.InsertRow(new SupplierCompanyDto());
+            count++;
+        }
+        isCreate = true;
+    }
+
+    async Task InsertRow(SupplierCompanyDto company)
+    {
+        if(isCreate == false)
+        {
+            await _companiesGrid.Reload();
+            await _companiesGrid.InsertRow(company);
+            count++;
+        }
+        isCreate = true;
+    }
+
+    #endregion
+
+
+
+    async Task OpenTags(int companyId, MainLayout MainLayout)
+    {
+        await DialogService.OpenAsync<DialogCompanyTagComponent>($"{_companies.Where(x=>x.Id == companyId).First().Name} - Firma Etiketleri",
+              new Dictionary<string, object>() { { "CompanyId", companyId }, { "MainLayout", MainLayout} },
+              new DialogOptions() { });
+    }
+
+    async Task OpenResponsiblePeople(int companyId, MainLayout mainLayout)
+    {
+        await DialogService.OpenAsync<DialogCompanyResponsiblePeopleComponent>($"{_companies.Where(x => x.Id == companyId).First().Name} - Firma Çalışanları",
+              new Dictionary<string, object>() { { "CompanyId", companyId }, {"MainLayout", mainLayout } },
+              new DialogOptions() { Width = "900px" });
+    }
+
+    async Task OpenOffers(int companyId, MainLayout mainLayout)
+    {
+        await DialogService.OpenAsync<DialogCompanyTagComponent>($"{_companies.Where(x => x.Id == companyId).First().Name} - Firma Teklifleri",
+              new Dictionary<string, object>() { { "CompanyId", companyId },{"MainLayout", mainLayout } },
+              new DialogOptions() { });
+    }
+
+
+    void ShowNotification(NotificationMessage message)
+    {
+        NotificationService.Notify(message);
+    }
+}

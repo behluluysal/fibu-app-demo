@@ -1,0 +1,301 @@
+﻿@using System.Text.Json;
+@using Core.Pagination;
+@using Core.AutoMapperDtos;
+
+@inject IBusinessPartnersScreenUseCases BusinessPartnersScreenUseCases
+@inject NotificationService NotificationService
+@inject DialogService DialogService
+
+<AuthorizeView Roles="@Permission.BusinessPartners.Create">
+    <Authorized>
+        <RadzenButton Icon="add_circle_outline" style="margin-bottom: 10px" Text="Ekle" Click="@InsertRow" />
+    </Authorized>
+</AuthorizeView>
+
+<RadzenDataGrid @ref="_partnersGrid" AllowFiltering="true" FilterMode="FilterMode.Simple" AllowPaging="true" PageSizeOptions="@pageSizeOptions" AllowSorting="true" EditMode="DataGridEditMode.Single"
+                Data="@_partners" IsLoading="@isLoading" LoadData="@LoadData" Count="@count" TItem="BusinessPartnerDto" RowUpdate="@OnUpdateRow" RowCreate="@OnCreateRow" ColumnWidth="200px">
+    <Columns>
+
+        <AuthorizeView Roles="@(String.Join(",",Permission.BPResponsiblePeople.View,Permission.Requests.View))" Context="baseAuth">
+            <Authorized Context="baseAuth">
+                <RadzenDataGridColumn Width="50px" TItem="BusinessPartnerDto" Property="Id" Title="Detaylar" Filterable="false" Sortable="false" TextAlign="TextAlign.Center">
+                    <Template Context="partner">
+                        @{
+                            if (partner.Id != 0)
+                            {
+                                <RadzenMenu Click="menuClick">
+                                    <RadzenMenuItem Icon="list">
+                                        <AuthorizeView Roles="@Permission.BPResponsiblePeople.View">
+                                            <Authorized>
+                                                <RadzenMenuItem Text="Çalışanlar" Value="partner.Id" Icon="check_circle"></RadzenMenuItem>
+                                            </Authorized>
+                                        </AuthorizeView>
+                                        <AuthorizeView Roles="@Permission.Requests.View">
+                                            <Authorized>
+                                                <RadzenMenuItem Text="İstekler" Value="partner.Id" Icon="check_circle"></RadzenMenuItem>
+                                            </Authorized>
+                                        </AuthorizeView>
+                                    </RadzenMenuItem>
+                                </RadzenMenu>
+                            }
+                        }
+                    </Template>
+                </RadzenDataGridColumn>
+            </Authorized>
+        </AuthorizeView>
+
+        <RadzenDataGridColumn TItem="BusinessPartnerDto" Property="Name" Title="Firma Adı">
+            <EditTemplate Context="partner">
+
+                <RadzenTextBox @bind-Value="partner.Name" Style="width:100%; display: block" Name="Name" />
+                @{
+                    if (count == 1)
+                    {
+                        <RadzenRequiredValidator Text="İş Ortağı adı zorunludur." Component="Name" Popup="false" />
+                    }
+
+                    else
+                    {
+                        <RadzenRequiredValidator Text="İş Ortağı adı zorunludur." Component="Name" Popup="true" />
+                    }
+                }
+            </EditTemplate>
+        </RadzenDataGridColumn>
+
+        <RadzenDataGridColumn TItem="BusinessPartnerDto" Property="Adress" Title="Adres">
+            <EditTemplate Context="partner">
+                <RadzenTextBox @bind-Value="partner.Adress" Style="width:100%; display: block" Name="Adress" />
+            </EditTemplate>
+        </RadzenDataGridColumn>
+
+        <RadzenDataGridColumn TItem="BusinessPartnerDto" Property="Email" Title="Email">
+            <EditTemplate Context="partner">
+                <RadzenTextBox @bind-Value="partner.Email" Style="width:100%; display: block" Name="Email" />
+                @{
+                    if (count == 1)
+                    {
+                        <RadzenRequiredValidator Text="İş Ortağı email'i zorunludur." Component="Email" Popup="false" />
+                    }
+
+                    else
+                    {
+                        <RadzenRequiredValidator Text="İş Ortağı email'i zorunludur." Component="Email" Popup="true" />
+                    }
+                }
+            </EditTemplate>
+        </RadzenDataGridColumn>
+
+        <AuthorizeView Roles="@Permission.BusinessPartners.Edit">
+            <Authorized>
+                <RadzenDataGridColumn TItem="BusinessPartnerDto" Context="sampleBlazorModelsSampleOrder" Filterable="false" Sortable="false" TextAlign="TextAlign.Center" Width="70px">
+                    <Template Context="partner">
+                        <RadzenButton Icon="edit" Size="ButtonSize.Small" Click="@(args => EditRow(partner))" @onclick:stopPropagation="true">
+                        </RadzenButton>
+                    </Template>
+                    <EditTemplate Context="partner">
+                        <RadzenButton Icon="save" Size="ButtonSize.Small" Click="@((args) => SaveRow(partner))">
+                        </RadzenButton>
+                        <RadzenButton Icon="cancel" Size="ButtonSize.Small" ButtonStyle="ButtonStyle.Secondary" Click="@((args) => CancelEdit(partner))">
+                        </RadzenButton>
+                    </EditTemplate>
+                </RadzenDataGridColumn>
+            </Authorized>
+        </AuthorizeView>
+
+        <AuthorizeView Roles="@Permission.BusinessPartners.Delete">
+            <Authorized>
+                <RadzenDataGridColumn TItem="BusinessPartnerDto" Context="partner" Filterable="false" Sortable="false" TextAlign="TextAlign.Center" Width="70px">
+                    <Template Context="partner">
+                        @{
+                            if (partner.Id != 0)
+                            {
+                                <RadzenButton ButtonStyle="ButtonStyle.Danger" Icon="close" Size="ButtonSize.Small" @onclick:stopPropagation="true" Click=@(args => DeleteRow(partner, _partnersGrid)) />
+                            }
+                        }
+                    </Template>
+                </RadzenDataGridColumn>
+            </Authorized>
+        </AuthorizeView>
+
+    </Columns>
+</RadzenDataGrid>
+
+@code {
+    RadzenDataGrid<BusinessPartnerDto> _partnersGrid;
+    private IEnumerable<BusinessPartnerDto> _partners { get; set; }
+    int count;
+    bool isLoading;
+    bool isCreate = false;
+    IEnumerable<int> pageSizeOptions = new int[] { 10, 25, 50, 100 };
+    [CascadingParameter(Name = "MainLayout")]
+    public MainLayout MainLayout { get; set; }
+
+    async Task HandleException(Exception e) => await MainLayout.HandleException(e);
+
+
+    #region DataGrid Region
+
+    async Task menuClick(MenuItemEventArgs e)
+    {
+        switch (e.Text)
+        {
+            case "İstekler":
+                await OpenRequests(int.Parse(e.Value.ToString()), MainLayout);
+                break;
+            case "Çalışanlar":
+                await OpenResponsiblePeople(int.Parse(e.Value.ToString()), MainLayout);
+                break;
+            default:
+                break;
+        }
+    }
+
+    async Task LoadData(LoadDataArgs args)
+    {
+        isLoading = true;
+        try
+        {
+            QueryParams qp = new QueryParams();
+            qp.Page = args.Skip.Value;
+            qp.PostsPerPage = args.Top.Value;
+            qp.Sort = args.OrderBy.ToString();
+            qp.Filter = args.Filter;
+
+            var response = await BusinessPartnersScreenUseCases.ViewBusinessPartnersAsync(qp);
+            count = response.Item1;
+            _partners = response.Item2;
+            isLoading = false;
+        }
+        catch (Exception e)
+        {
+            await HandleException(e);
+        }
+    }
+
+    async Task OnUpdateRow(BusinessPartnerDto partner)
+    {
+        if (partner.Id == 0)
+        {
+            await OnCreateRow(partner);
+        }
+        else
+        {
+            try
+            {
+                await BusinessPartnersScreenUseCases.UpdateBusinessPartnerAsync(partner.Id, partner);
+                ShowNotification(new NotificationMessage { Severity = NotificationSeverity.Success, Summary = "İş Ortağını Güncelle", Detail = $"{partner.Name} isimli iş ortağı başarıyla güncellendi.", Duration = 4000 });
+            }
+            catch (Exception e)
+            {
+                await HandleException(e);
+                EditRow(partner);
+            }
+        }
+    }
+
+    async Task OnCreateRow(BusinessPartnerDto partner)
+    {
+        try
+        {
+            var response = await BusinessPartnersScreenUseCases.CreateBusinessPartnerAsync(partner);
+            ShowNotification(new NotificationMessage { Severity = NotificationSeverity.Success, Summary = "İş Ortağı Ekle", Detail = $"{partner.Name} isimli iş ortağı başarıyla eklendi.", Duration = 4000 });
+            isCreate = false;
+            await _partnersGrid.Reload();
+        }
+        catch (Exception e)
+        {
+            await HandleException(e);
+            await InsertRow(partner);
+        }
+    }
+
+
+    void EditRow(BusinessPartnerDto partner)
+    {
+        _partnersGrid.EditRow(partner);
+    }
+
+    void SaveRow(BusinessPartnerDto partner)
+    {
+        _partnersGrid.UpdateRow(partner);
+        isCreate = false;
+    }
+
+    void CancelEdit(BusinessPartnerDto partner)
+    {
+        _partnersGrid.CancelEditRow(partner);
+        if (partner.Id == 0)
+        {
+            count--;
+        }
+        isCreate = false;
+        _partnersGrid.Reload();
+    }
+
+    async Task DeleteRow(BusinessPartnerDto partner, RadzenDataGrid<BusinessPartnerDto> radzenDataGrid)
+    {
+        bool? flag = false;
+        flag = await DialogService.Confirm($"{partner.Name} isimli iş ortağını silmek istediğinize emin misiniz?", "İş Ortağını Sil", new ConfirmOptions() { OkButtonText = "Evet", CancelButtonText = "Hayır" });
+        if (flag == true)
+        {
+            try
+            {
+                await BusinessPartnersScreenUseCases.DeleteBusinessPartnerAsync(partner.Id);
+                ShowNotification(new NotificationMessage { Severity = NotificationSeverity.Success, Summary = "İş Ortağını Sil", Detail = $"{partner.Name} isimli iş ortağı başarıyla silindi.", Duration = 4000 });
+                await radzenDataGrid.Reload();
+            }
+            catch (Exception e)
+            {
+                await MainLayout.HandleException(e);
+            }
+        }
+    }
+
+    async Task InsertRow()
+    {
+        if (isCreate == false)
+        {
+            await _partnersGrid.Reload();
+            await _partnersGrid.InsertRow(new BusinessPartnerDto());
+            count++;
+        }
+        isCreate = true;
+    }
+
+    async Task InsertRow(BusinessPartnerDto partner)
+    {
+        if (isCreate == false)
+        {
+            await _partnersGrid.Reload();
+            await _partnersGrid.InsertRow(partner);
+            count++;
+        }
+        isCreate = true;
+    }
+
+    #endregion
+
+
+
+    async Task OpenRequests(int companyId, MainLayout MainLayout)
+    {
+
+        await DialogService.OpenAsync<RequestRowPartnerComponent>($"{_partners.Where(x => x.Id == companyId).First().Name} - İstekler",
+              new Dictionary<string, object>() { { "PartnerId", companyId }, { "MainLayout", MainLayout } },
+              new DialogOptions() { Width = "1200px" });
+    }
+
+    async Task OpenResponsiblePeople(int companyId, MainLayout MainLayout)
+    {
+        await DialogService.OpenAsync<DialogPartnerResponsiblePeopleComponent>($"{_partners.Where(x => x.Id == companyId).First().Name} - Çalışanlar",
+              new Dictionary<string, object>() { { "CompanyId", companyId }, { "MainLayout", MainLayout } },
+              new DialogOptions() { Width = "1200px" });
+    }
+
+
+
+    void ShowNotification(NotificationMessage message)
+    {
+        NotificationService.Notify(message);
+    }
+}
